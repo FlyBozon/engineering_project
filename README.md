@@ -10,3 +10,13 @@ TODO:
 - divide it into parts
 - process each part
 - coneect back to original size image
+
+### How to run 
+create venv
+`python3 -m .venv venv`
+source venv
+`source venv/bin/activate`
+install requirements
+`pip install requirements.txt`
+run your code 
+ex `python3 main.py`

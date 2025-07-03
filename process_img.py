@@ -1,15 +1,19 @@
-import rasterio
+#import rasterio
 import numpy as np
 import cv2
 import tifffile
 import matplotlib.pyplot as plt
+import torch
+from torchvision import transforms
+from load_model import model
 
 class ImageProcessor:
     def __init__(self, image_path, tile_size=512, overlap=64):
         self.image_path = image_path
         self.tile_size = tile_size
         self.overlap = overlap
-        self.image = self.load_tiff()  # Load on init
+        self.image = self.load_tiff() 
+        self.model = model 
 
     def load_tiff(self):
         #other options
@@ -38,6 +42,26 @@ class ImageProcessor:
         plt.axis('off')
         plt.show()
 
+    def preprocess_tile(self, tile):
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], 
+                                 std=[0.229, 0.224, 0.225])
+        ])
+        return transform(tile).unsqueeze(0)
+
+    def predict_tile(self, tile):
+        if self.model is None:
+            raise ValueError("No model provided.")
+        self.model.eval()
+        with torch.no_grad():
+            input_tensor = self.preprocess_tile(tile)
+            if input_tensor.shape[1] != 3:  # Ensure 3 channels
+                input_tensor = input_tensor.repeat(1, 3, 1, 1)
+            output = self.model(input_tensor)
+            prediction = torch.argmax(output, dim=1).squeeze().cpu().numpy()
+        return prediction
+    
     def create_weight_mask(self):
         weight = np.ones((self.tile_size, self.tile_size), dtype=np.float32)
         fade = self.overlap // 2
