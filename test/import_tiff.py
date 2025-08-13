@@ -1,4 +1,4 @@
-#import rasterio
+import rasterio
 import matplotlib.pyplot as plt
 
 import cv2

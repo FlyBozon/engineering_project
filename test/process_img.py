@@ -34,13 +34,58 @@ class ImageProcessor:
                 tiles.append(tile)
                 positions.append((x, y))
         return tiles, positions
+    
+    #for easier testing, to not to process whole tiff image
+    def cut_one_tile(self, x_pos, y_pos):
+        h, w = self.image.shape[:2]
+        if((x_pos+self.tile_size)>w or x_pos<0):
+             print("x out of range")
+             return 0
+        if((y_pos+self.tile_size)>h and y_pos<0):
+            print("y out of range")
+            return 0
+        
+        x=x_pos
+        y=y_pos
 
-    def show(self, image=None):
+        tile = self.image[y:y+self.tile_size, x:x+self.tile_size]
+        pos = (x,y)
+
+        return tile, pos
+
+    def show(self, image=None, is_segmentation=False, oryg_img=None):
         if image is None:
             image = self.image
-        plt.imshow(image, cmap='gray' if image.ndim == 2 else None)
-        plt.axis('off')
-        plt.show()
+
+        if is_segmentation and oryg_img is not None:
+            fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+
+            axs[0].imshow(oryg_img, cmap='gray' if oryg_img.ndim == 2 else None)
+            axs[0].set_title("Oryginalny obraz")
+            axs[0].axis('off')
+
+            im = axs[1].imshow(image, cmap='tab10', vmin=0, vmax=3)
+            axs[1].set_title("Segmentacja")
+            axs[1].axis('off')
+            # plt.imshow(image, cmap='tab10', vmin=0, vmax=3)  # 4 klasy (0-3)
+            # plt.colorbar(label='Class ID')
+
+            fig.colorbar(im, ax=axs[1], fraction=0.046, pad=0.04, label='Class ID')
+            plt.tight_layout()
+            plt.show()
+
+        else:
+            plt.imshow(
+                image,
+                cmap='tab10' if is_segmentation else ('gray' if image.ndim == 2 else None),
+                vmin=0 if is_segmentation else None,
+                vmax=3 if is_segmentation else None
+            )
+            if is_segmentation:
+                plt.colorbar(label='Class ID')
+            plt.axis('off')
+            plt.show()
+
 
     def preprocess_tile(self, tile):
         transform = transforms.Compose([
@@ -56,7 +101,7 @@ class ImageProcessor:
         self.model.eval()
         with torch.no_grad():
             input_tensor = self.preprocess_tile(tile)
-            if input_tensor.shape[1] != 3:  # Ensure 3 channels
+            if input_tensor.shape[1] != 3:  #ensure 3 channels
                 input_tensor = input_tensor.repeat(1, 3, 1, 1)
             output = self.model(input_tensor)
             prediction = torch.argmax(output, dim=1).squeeze().cpu().numpy()

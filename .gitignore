@@ -1,4 +1,6 @@
 datasets/
+training/bogoo-wogoo/
+/training/bogoo-wogoo/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
