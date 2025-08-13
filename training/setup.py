@@ -117,12 +117,12 @@ for img in range(len(img_list)):
     val, counts = np.unique(temp_mask, return_counts=True)
     
     if (1 - (counts[0]/counts.sum())) > 0.05:
-        print("Save Me")
+        #print("Save Me")
         cv2.imwrite('data/256_patches/images_with_useful_info/images/'+img_name, temp_image)
         cv2.imwrite('data/256_patches/images_with_useful_info/masks/'+mask_name, temp_mask)
         
     else:
-        print("I am useless")   
+        #print("I am useless")   
         useless +=1
 
 print("Total useful images are: ", len(img_list)-useless)

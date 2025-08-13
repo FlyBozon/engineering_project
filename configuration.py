@@ -7,6 +7,7 @@ import json
 
 INPUT_DIR = "datasets"
 
+
 def load_dataset(dataset_name, dataset_info="datasets_info.json"):
    #load dataset_info - nr of classes, path, img n mask format
    with open(dataset_info, 'r') as f:
@@ -43,8 +44,9 @@ def load_dataset(dataset_name, dataset_info="datasets_info.json"):
    
    return dataset_dir, n_classes, dataset_size, labels, count, training_params
 
-def into_tiles(images, size, overlap_size):
+def into_tiles(path, size, overlap_size):
     #return tile, also maybe nr of tiles
+    img_path = path+"images/"
     pass
 
 def choose_useful(images, usefulness_percent):

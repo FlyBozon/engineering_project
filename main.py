@@ -29,8 +29,14 @@ np.random.seed(seed)
 # tf.random.set_seed(seed)
 random.seed(seed)
 
-labels, count = dataset.analyze_sample()
+#labels, count = dataset.analyze_sample()
 
-num_patches = dataset.into_tiles(patch_size, overlap_size=64)
+#num_patches = dataset.into_tiles(patch_size, overlap_size=64)
+#print(f'Num patches = {num_patches}')
 
-dataset.plot_img_n_mask(f'output_{dataset.dataset_dir}/256_patches', 10)
+#dataset.plot_img_n_mask(dataset.dataset_dir, 10)
+
+#dataset.choose_useful()
+#print(f'{dataset.useful_images_dir}')
+dataset.plot_img_n_mask(f'{dataset.output_dir}/useful_patches', 10)
+

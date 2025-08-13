@@ -42,16 +42,27 @@ class DatasetProcessor:
         self.dataset_size = len(self.image_files)
         
     def _create_output_dirs(self):
+        # Define all directory paths as instance variables
+        self.patches_images_dir = f'{self.output_dir}/{self.patch}_patches/images'
+        self.patches_masks_dir = f'{self.output_dir}/{self.patch}_patches/masks'
+        self.useful_images_dir = f'{self.output_dir}/useful_patches/images'
+        self.useful_masks_dir = f'{self.output_dir}/useful_patches/masks'
+        self.train_images_dir = f'{self.output_dir}/data_for_training/train_images/train'
+        self.train_masks_dir = f'{self.output_dir}/data_for_training/train_masks/train'
+        self.val_images_dir = f'{self.output_dir}/data_for_training/val_images/val'
+        self.val_masks_dir = f'{self.output_dir}/data_for_training/val_masks/val'
+        
         dirs = [
-            f'{self.output_dir}/{self.patch}_patches/images',
-            f'{self.output_dir}/{self.patch}_patches/masks',
-            f'{self.output_dir}/useful_patches/images', 
-            f'{self.output_dir}/useful_patches/masks',
-            f'{self.output_dir}/data_for_training/train_images/train',
-            f'{self.output_dir}/data_for_training/train_masks/train',
-            f'{self.output_dir}/data_for_training/val_images/val',
-            f'{self.output_dir}/data_for_training/val_masks/val'
+            self.patches_images_dir,
+            self.patches_masks_dir,
+            self.useful_images_dir,
+            self.useful_masks_dir,
+            self.train_images_dir,
+            self.train_masks_dir,
+            self.val_images_dir,
+            self.val_masks_dir
         ]
+        
         for dir_path in dirs:
             os.makedirs(dir_path, exist_ok=True)
     
@@ -60,8 +71,8 @@ class DatasetProcessor:
         random_mask = random.choice(self.mask_files)
         
         temp_img = cv2.imread(random_img)
-        plt.imshow(temp_img[:,:,2])
-        plt.show()
+        # plt.imshow(temp_img[:,:,2])
+        # plt.show()
         
         temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
         labels, count = np.unique(temp_mask, return_counts=True)
@@ -246,3 +257,128 @@ class DatasetProcessor:
             
             plt.tight_layout()
             plt.show()
+
+    def choose_useful(self, usefulness_percent=0.05): #at least 5% useful area (?)
+        # return nr of useful&useless
+        # save useful in useful folder
+        useless=0
+        useful=0
+
+        img_list = os.listdir(self.patches_images_dir)
+        msk_list = os.listdir(self.patches_masks_dir)
+
+        for img in range(len(img_list)):   #using t1_list as all lists are of same size
+            img_name=img_list[img]
+            mask_name = msk_list[img]
+            print("Now preparing image and masks number: ", img)
+            
+            temp_image=cv2.imread(self.patches_images_dir+'/'+img_list[img], 1)
+        
+            temp_mask=cv2.imread(self.patches_masks_dir+'/'+msk_list[img], 0)
+            #temp_mask=temp_mask.astype(np.uint8)
+            
+            val, counts = np.unique(temp_mask, return_counts=True)
+            
+            if (1 - (counts[0]/counts.sum())) > usefulness_percent: 
+                print("Save Me")
+                useful+=1        
+                if os.path.exists(self.useful_images_dir+'/'+img_name):
+                    print(f"Tile already exists, skipping")  
+                    continue
+                cv2.imwrite(self.useful_images_dir+'/'+img_name, temp_image)
+                cv2.imwrite(self.useful_masks_dir+'/'+mask_name, temp_mask)
+                
+            else:
+                print("I am useless")   
+                useless +=1
+        
+        print(f'Useful = {useful}, useles = {useless}')
+        pass
+
+    def divide_train_val_test(self):
+        #create/check if previously created folders
+        pass
+
+
+    def setup_model(self, model):
+        #get info about which model to load (maybe like a string or smth)
+        # return model parameters count or some summary?
+        pass
+
+    def paramters(self):
+        #training parameters for a specific model?
+        pass
+
+    def train(self):
+        pass
+
+    def save_checkpoint(self, epoch, model, optimizer, metrics):
+        #save model progress every x epoch, learning rate scheduler state, random seeds for reproducibility
+        pass
+
+    def check_for_not_finished_training(self):
+        #return unfinished training parameters if found or false?
+        #resume from latest checkpoint, restore optimizer state and epoch number
+        pass
+
+    def validate_data_integrity(self, images, masks):
+        #check for corrupted files, mismatched image-mask pairs, invalid class IDs
+        #plot random img+mask to check if it is ok
+        pass
+
+    def convert_mask_into_labels(self):
+        #some datasets have rgb masks or other strange types (e.g. deepglobe), 
+        # so i want to standartize them in a way like landcoverai has (numbers from 0 to 5)
+        # found nice word for that - one-hot encoding
+        pass
+
+    def preprocess_image(self):
+        # normalize, resize, convert color channels, maybe cloud masking
+        pass
+
+
+    def preprocess_mask(mself):
+        # convert color-coded masks to integer class IDs, one-hot encoding if needed.
+        pass
+
+    def augment_data(self, images, masks):
+        #apply random flips, rotations, brightness changes, noise injection, etc
+
+        #I guess woulnt need that, as the datsets are pretty big
+        pass
+
+    def evaluate(self, model, dataloader):
+        #compute IoU, precision, recall, F1/Dice.
+        pass
+
+    def plot_sample_predictions(self, model, images, masks):
+        # visual sanity check of model output during/after training
+        pass
+
+    def stitch_tiles(self, predictions, original_image_shape):
+        #recombine tiles back into full-size satellite image masks
+        pass
+
+    def export_results(self, predictions, output_path):
+        #save predictions in georeferenced format (GeoTIFF, etc.) - maybe for later
+        pass
+
+    def calculate_class_weights(self, masks):
+        # compute inverse frequency weights for imbalanced classes
+        pass
+
+    def learning_rate_scheduler(self, optimizer, epoch, metrics):
+        #adjust learning rate based on validation performance
+        pass
+
+    def early_stopping_check(self, val_metrics, patience):
+        #stop training when validation metrics dont change much
+        pass
+
+    def post_process_predictions(self, predictions):
+        #apply CRF, morphological operations, or filtering to clean up predictions
+        pass
+
+    def ensemble_predictions(self, model_list, image):
+        #combine predictions from multiple models for better accuracy
+        pass
