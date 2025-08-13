@@ -1,12 +1,20 @@
-# Hello world
+# general info
+
+## tech stack
+tensorflow
+
+`pip install requirements.txt`
+
+datasets should be loaded before training, all of them are 1Gb+, so it would take a while 
+
+### datasets
+info about each dataset is covered in json file - all parameters are read from there at the beginning of the training, so if u want to adjust training parameters for a specific dataset - go there
 
 ### Landcover.ai
 dataset has 5 classes:
 0 - unlabeled, 1 - ..., 2 - ..., ...
 
 after dividing tiles into training patches some of them are fuly unlabeled, so to not to overtrain nn on those unlabeled, they are removed from training dataset (leave only useful ones).
-
-### other datasets
 
 
 ## general structure of the code

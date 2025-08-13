@@ -31,13 +31,12 @@
         "resize_needed": false
       },
       "paths": {
-        "images_dir": "datasets/landcover.ai/images",
-        "masks_dir": "datasets/landcover.ai/masks"
+        "dataset_dir": "landcover.ai.v1" //landcover.ai has 2 versions, in v0 there are no roads
       }
     },
     
     "deepglobe": {
-      "name": "DeepGlobe Land Cover",
+      "name": "DeepGlobe",
       "description": "RGB satellite imagery for land cover classification",
       "type": "satellite",
       "classes": {
@@ -70,8 +69,7 @@
         "target_size": [512, 512]
       },
       "paths": {
-        "images_dir": "datasets/deepglobe/images",
-        "masks_dir": "datasets/deepglobe/masks"
+        "dataset_dir": "deepglobe"
       }
     },
     "inria": {
@@ -102,8 +100,7 @@
             "resize_needed": false
         },
         "paths": {
-            "images_dir": "datasets/inria/images",
-            "masks_dir": "datasets/inria/masks"
+            "dataset_dir": "inria"
         }
     },
 
@@ -141,8 +138,7 @@
         "resize_needed": false
       },
       "paths": {
-        "images_dir": "datasets/uavid/images",
-        "masks_dir": "datasets/uavid/masks"
+        "dataset_dir": "uavid"
       }
     },
 
@@ -179,8 +175,7 @@
         "target_size": [256, 256]
       },
       "paths": {
-        "images_dir": "datasets/visloc/images",
-        "masks_dir": "datasets/visloc/masks"
+        "dataset_dir": "visloc"
       }
     },
 
@@ -196,7 +191,7 @@
           "background": [0, 0, 0],
           "building": [128, 0, 0],
           "road": [128, 128, 128],
-          "vegetation": [0, 128, 0],
+          "vegetation": [0, 128, 0],// Urban Drone Dataset
           "vehicle": [255, 0, 0],
           "other": [128, 128, 0]
         },
@@ -216,8 +211,7 @@
         "resize_needed": false
       },
       "paths": {
-        "images_dir": "datasets/vdd/images",
-        "masks_dir": "datasets/vdd/masks"
+        "dataset_dir": "vdd"
       }
     },
 
@@ -255,13 +249,12 @@
         "resize_needed": false
       },
       "paths": {
-        "images_dir": "datasets/udd/images",
-        "masks_dir": "datasets/udd/masks"
+        "dataset_dir": "udd"
       }
     },
 
     "idd": {
-      "name": "IDD",// Integrated Drone Dataset
+      "name": "IDD", // Integrated Drone Dataset
       "description": "Integrated drone dataset - extension to VDD with additional classes and scenes",
       "type": "drone",
       "classes": {
@@ -296,8 +289,7 @@
         "resize_needed": false
       },
       "paths": {
-        "images_dir": "datasets/idd/images",
-        "masks_dir": "datasets/idd/masks"
+        "dataset_dir": "idd"
       }
     },
 
@@ -338,13 +330,12 @@
         "resize_needed": false
       },
       "paths": {
-        "images_dir": "datasets/aerialIVL/images",
-        "masks_dir": "datasets/aerialIVL/masks"
+        "dataset_dir": "aerialivl"
       }
     },
 
     "CS-UAV": {
-      "name": "CS-UAV", //(Cityscapes-UAV)"
+      "name": "CS-UAV",  //(Cityscapes-UAV)"
       "description": "UAV-based urban scene understanding dataset with Cityscapes-like annotations",
       "type": "drone",
       "classes": {
@@ -361,7 +352,7 @@
           "background": [0, 0, 0],
           "boundary": [255, 255, 255]
         },
-        "ignore_class": 7
+        "ignore_class": 6 //technically 7 also
       },
       "data_format": {
         "image_format": "png",
@@ -377,8 +368,7 @@
         "resize_needed": false
       },
       "paths": {
-        "images_dir": "datasets/CS-UAV/images",
-        "masks_dir": "datasets/CS-UAV/masks"
+        "dataset_dir": "cs-uav"
       }
     }
   },

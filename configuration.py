@@ -1,10 +1,47 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+import glob
+import random
+import json
 
-def load_dataset(path):
-    # return nr of labes&classes, dataset size, nr of pixels for each class(?)
-    pass
+INPUT_DIR = "datasets"
+
+def load_dataset(dataset_name, dataset_info="datasets_info.json"):
+   #load dataset_info - nr of classes, path, img n mask format
+   with open(dataset_info, 'r') as f:
+       config = json.load(f)
+   
+   dataset = config['datasets'][dataset_name]
+   n_classes = dataset['classes']['num_classes']
+   dataset_dir = dataset['paths']['dataset_dir']
+   img_format = dataset['data_format']['image_format']
+   mask_format = dataset['data_format']['mask_format']
+   training_params = config['training_params']['default']
+   
+   images_path = f"{INPUT_DIR}/{dataset_dir}/images"
+   masks_path = f"{INPUT_DIR}/{dataset_dir}/masks"
+   
+   image_files = glob.glob(f"{images_path}/*.{img_format}")
+   mask_files = glob.glob(f"{masks_path}/*.{mask_format}")
+   
+   random_img = random.choice(image_files)
+   random_mask = random.choice(mask_files)
+   
+   temp_img = cv2.imread(random_img)
+   plt.imshow(temp_img[:,:,2])  #view each channel...
+   plt.show()
+   
+   temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
+   labels, count = np.unique(temp_mask, return_counts=True)
+   print("Labels are: ", labels, " and the counts are: ", count)
+   
+   if len(labels) != n_classes:
+       print(f"ERROR: Expected {n_classes} classes, but found {len(labels)} in mask!")
+   
+   dataset_size = len(image_files)
+   
+   return dataset_dir, n_classes, dataset_size, labels, count, training_params
 
 def into_tiles(images, size, overlap_size):
     #return tile, also maybe nr of tiles

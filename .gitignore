@@ -1,6 +1,7 @@
 datasets/
 training/bogoo-wogoo/
 /training/bogoo-wogoo/
+saved_parameters.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
