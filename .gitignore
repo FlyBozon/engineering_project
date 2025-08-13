@@ -2,6 +2,7 @@ datasets/
 training/bogoo-wogoo/
 /training/bogoo-wogoo/
 saved_parameters.json
+output_landcover.ai.v1/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

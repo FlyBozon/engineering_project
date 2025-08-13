@@ -31,7 +31,7 @@
         "resize_needed": false
       },
       "paths": {
-        "dataset_dir": "landcover.ai.v1" //landcover.ai has 2 versions, in v0 there are no roads
+        "dataset_dir": "landcover.ai.v1" 
       }
     },
     
@@ -180,7 +180,7 @@
     },
 
     "vdd": {
-      "name": "VDD", //various Drone Dataset
+      "name": "VDD",
       "description": "Various drone imagery dataset with diverse aerial scenes and objects",
       "type": "drone",
       "classes": {
@@ -191,7 +191,7 @@
           "background": [0, 0, 0],
           "building": [128, 0, 0],
           "road": [128, 128, 128],
-          "vegetation": [0, 128, 0],// Urban Drone Dataset
+          "vegetation": [0, 128, 0],
           "vehicle": [255, 0, 0],
           "other": [128, 128, 0]
         },
@@ -216,7 +216,7 @@
     },
 
     "udd": {
-      "name": "UDD", // Urban Drone Dataset
+      "name": "UDD",
       "description": "Urban drone dataset focused on city environments and urban infrastructure",
       "type": "drone",
       "classes": {
@@ -254,7 +254,7 @@
     },
 
     "idd": {
-      "name": "IDD", // Integrated Drone Dataset
+      "name": "IDD", 
       "description": "Integrated drone dataset - extension to VDD with additional classes and scenes",
       "type": "drone",
       "classes": {
@@ -335,7 +335,7 @@
     },
 
     "CS-UAV": {
-      "name": "CS-UAV",  //(Cityscapes-UAV)"
+      "name": "CS-UAV", 
       "description": "UAV-based urban scene understanding dataset with Cityscapes-like annotations",
       "type": "drone",
       "classes": {
@@ -352,7 +352,7 @@
           "background": [0, 0, 0],
           "boundary": [255, 255, 255]
         },
-        "ignore_class": 6 //technically 7 also
+        "ignore_class": 6 
       },
       "data_format": {
         "image_format": "png",
