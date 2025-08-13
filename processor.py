@@ -188,6 +188,10 @@ class DatasetProcessor:
                     
                     patch_name = f"{base_name}_patch_{row}_{col}.png"
                     output_file_path = f"{output_path}/{patch_name}"
+                    if os.path.exists(output_file_path):
+                        print(f"Tile already exists, skipping: {patch_name}")
+                        tile_count += 1  
+                        continue
                     success = cv2.imwrite(output_file_path, single_patch)
                     if not success:
                         print(f"Failed to save: {output_file_path}")
@@ -242,23 +246,3 @@ class DatasetProcessor:
             
             plt.tight_layout()
             plt.show()
-
-datasets_info = "datasets_info.json"
-current_dataset = "landcover.ai"
-
-dataset = DatasetProcessor(current_dataset, datasets_info)
-
-patch_size = 256
-batch_size = 16 
-seed = 42
-
-#random seeds for reproducibility
-np.random.seed(seed)
-# tf.random.set_seed(seed)
-random.seed(seed)
-
-labels, count = dataset.analyze_sample()
-
-num_patches = dataset.into_tiles(patch_size, overlap_size=64)
-
-dataset.plot_img_n_mask(f'output_{dataset.dataset_dir}/256_patches', 10)
