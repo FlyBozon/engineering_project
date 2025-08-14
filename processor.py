@@ -422,6 +422,8 @@ class DatasetProcessor:
         
         return (img, mask)
 
+        
+
     def setup_model(self, backbone='resnet34'):
         #model setup inspiration from https://youtu.be/0W6MKZqSke8
         print(f"Setting up model with {backbone} backbone...")
@@ -430,8 +432,13 @@ class DatasetProcessor:
         self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
         
         #calc train params
-        num_train_imgs = len(os.listdir(self.train_images_dir))
-        num_val_images = len(os.listdir(self.val_images_dir))
+        # num_train_imgs = len(os.listdir(self.train_images_dir))
+        # num_val_images = len(os.listdir(self.val_images_dir))
+
+        num_train_imgs = len(os.listdir(f"{self.train_images_dir}/train"))
+        num_val_images = len(os.listdir(f"{self.val_images_dir}/val"))
+
+        #print(f'num_training_imgs = {num_train_imgs}, num_val_images = {num_val_images}')
         
         if num_train_imgs == 0 or num_val_images == 0:
             print("ERROR: No training or validation images found!")
@@ -439,6 +446,8 @@ class DatasetProcessor:
         
         self.steps_per_epoch = num_train_imgs // self.batch_size
         self.val_steps_per_epoch = num_val_images // self.batch_size
+
+        #print(f'num_step_per_epoch = {self.steps_per_epoch}, num_val_step_per_epoch = {self.val_steps_per_epoch}')
         
         IMG_HEIGHT = self.patch
         IMG_WIDTH = self.patch
@@ -472,7 +481,7 @@ class DatasetProcessor:
 
         self.model.compile(
             optimizer='adam',
-            loss='categorical_crossentropy',  # Tymczasowe
+            loss='categorical_crossentropy', 
             metrics=['accuracy']
         )
 
