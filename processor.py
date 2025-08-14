@@ -330,7 +330,30 @@ class DatasetProcessor:
             os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.test_masks_dir}/'")
         
         print(f"Train: {len(train_files)}, Val: {len(val_files)}, Test: {len(test_files)}")  # Fixed syntax
+
+
+    def calculate_class_weights(self, labels=not None, counts=not None, masks_dir=None):
+        # compute inverse frequency weights for imbalanced classes
+        total_pixels = np.sum(counts)
         
+        class_weights = {}
+        for label, count in zip(labels, counts):
+            frequency = count / total_pixels
+            weight = 1.0 / frequency
+            class_weights[label] = weight
+        
+        avg_weight = np.mean(list(class_weights.values()))
+        for label in class_weights:
+            class_weights[label] /= avg_weight
+        
+        print("Class weights:")
+        for label, weight in class_weights.items():
+            count = counts[np.where(labels == label)[0][0]]
+            percentage = (count / total_pixels) * 100
+            print(f"  Class {label}: weight={weight:.4f}, pixels={count:,} ({percentage:.2f}%)")
+        
+        return class_weights
+
     def setup_model(self, model):
         #get info about which model to load (maybe like a string or smth)
         # return model parameters count or some summary?
@@ -392,10 +415,6 @@ class DatasetProcessor:
 
     def export_results(self, predictions, output_path):
         #save predictions in georeferenced format (GeoTIFF, etc.) - maybe for later
-        pass
-
-    def calculate_class_weights(self, masks):
-        # compute inverse frequency weights for imbalanced classes
         pass
 
     def learning_rate_scheduler(self, optimizer, epoch, metrics):
