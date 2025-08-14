@@ -541,7 +541,7 @@ class DatasetProcessor:
         tensorboard_cb = self.setup_tensorboard()
         callbacks.append(tensorboard_cb)
         
-        checkpoint_path = f"{self.checkpoints_dir}/best_model.hdf5"
+        checkpoint_path = f"{self.checkpoints_dir}/best_model.keras"
         os.makedirs(self.checkpoints_dir, exist_ok=True)
         checkpoint_cb = ModelCheckpoint(
             checkpoint_path,
@@ -583,7 +583,7 @@ class DatasetProcessor:
             class_weight=self.class_weight_dict  
         )
         
-        model_filename = f'{self.dataset_name}_{self.n_epochs}_epochs_{self.BACKBONE}_backbone_batch{self.batch_size}_v{self.current_version}.hdf5'
+        model_filename = f'{self.dataset_name}_{self.n_epochs}_epochs_{self.BACKBONE}_backbone_batch{self.batch_size}_v{self.current_version}.keras'
         self.model.save(model_filename)
         print(f"Final model saved as: {model_filename}")
         print(f"Best model saved as: {checkpoint_path}")
@@ -625,7 +625,7 @@ class DatasetProcessor:
         checkpoint_dir = self.checkpoints_dir
         os.makedirs(checkpoint_dir, exist_ok=True)
         
-        checkpoint_path = f"{checkpoint_dir}/checkpoint_epoch_{epoch}.hdf5"
+        checkpoint_path = f"{checkpoint_dir}/checkpoint_epoch_{epoch}.keras"
         model.save(checkpoint_path)
         
         checkpoint_info = {
@@ -649,7 +649,7 @@ class DatasetProcessor:
             print("No checkpoints found")
             return False
             
-        checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.hdf5')]
+        checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.keras')]
         
         if not checkpoint_files:
             print("No checkpoint files found")
