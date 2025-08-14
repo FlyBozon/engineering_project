@@ -6,16 +6,45 @@ import random
 import json
 import os
 
+from tensorflow.keras.metrics import MeanIoU
+from sklearn.preprocessing import MinMaxScaler
+from keras.utils import to_categorical
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import tensorflow as tf
+tf.compat.v1.disable_eager_execution() 
+from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
+import datetime
+
+import segmentation_models as sm
+
 class DatasetProcessor:
     def __init__(self, dataset_name, dataset_info_path="datasets_info.json", input_dir="datasets"):
         self.dataset_name = dataset_name
         self.input_dir = input_dir
         
-        # Load dataset info
         self._load_dataset_info(dataset_info_path)
         self._setup_paths()
         self.patch = 256
         self._create_output_dirs()
+        
+        self.seed = 24
+        self.batch_size = 16
+        self.n_epochs = 25
+        self.current_version = 1
+        self.scaler = MinMaxScaler()
+        self.BACKBONE = 'resnet34'  # default backbone
+        self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
+        
+        #model and training objects 
+        self.model = None
+        self.train_img_gen = None
+        self.val_img_gen = None
+        self.steps_per_epoch = None
+        self.val_steps_per_epoch = None
+        self.history = None
+
+        self.tensorboard_dir = f'{self.output_dir}/tensorboard'
+        self.class_weight_dict = None
         
     def _load_dataset_info(self, dataset_info_path):
         with open(dataset_info_path, 'r') as f:
@@ -27,7 +56,7 @@ class DatasetProcessor:
         self.img_format = dataset['data_format']['image_format']
         self.mask_format = dataset['data_format']['mask_format']
         self.training_params = config['training_params']['default']
-        #self.patch = config['preprocessing']['patch_size']
+        self.ignore_class = dataset['classes']['ignore_class'] 
         
         print(f"Loaded {dataset['name']}: {self.n_classes} classes")
         
@@ -42,17 +71,18 @@ class DatasetProcessor:
         self.dataset_size = len(self.image_files)
         
     def _create_output_dirs(self):
-        # Define all directory paths as instance variables
         self.patches_images_dir = f'{self.output_dir}/{self.patch}_patches/images'
         self.patches_masks_dir = f'{self.output_dir}/{self.patch}_patches/masks'
         self.useful_images_dir = f'{self.output_dir}/useful_patches/images'
         self.useful_masks_dir = f'{self.output_dir}/useful_patches/masks'
-        self.train_images_dir = f'{self.output_dir}/data_for_training/train/images'
-        self.train_masks_dir = f'{self.output_dir}/data_for_training/train/masks'
-        self.val_images_dir = f'{self.output_dir}/data_for_training/val/images'
-        self.val_masks_dir = f'{self.output_dir}/data_for_training/val/masks'
-        self.test_images_dir = f'{self.output_dir}/data_for_training/test/images'
-        self.test_masks_dir = f'{self.output_dir}/data_for_training/test/masks'
+        self.train_images_dir = f'{self.output_dir}/data_for_training/train_images/train'
+        self.train_masks_dir = f'{self.output_dir}/data_for_training/train_masks/train'
+        self.val_images_dir = f'{self.output_dir}/data_for_training/val_images/val'
+        self.val_masks_dir = f'{self.output_dir}/data_for_training/val_masks/val'
+        self.test_images_dir = f'{self.output_dir}/data_for_training/test_images/test'
+        self.test_masks_dir = f'{self.output_dir}/data_for_training/test_masks/test'
+        self.checkpoints_dir = f'{self.output_dir}/checkpoints'
+        self.models_dir = f'{self.output_dir}/models'
         
         
         dirs = [
@@ -76,8 +106,6 @@ class DatasetProcessor:
         random_mask = random.choice(self.mask_files)
         
         temp_img = cv2.imread(random_img)
-        # plt.imshow(temp_img[:,:,2])
-        # plt.show()
         
         temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
         labels, count = np.unique(temp_mask, return_counts=True)
@@ -216,7 +244,6 @@ class DatasetProcessor:
         
         return tile_count
 
-
     def plot_img_n_mask(self, folder_dir, n=3):
         images_dir = f"{folder_dir}/images"
         masks_dir = f"{folder_dir}/masks"
@@ -264,29 +291,28 @@ class DatasetProcessor:
             plt.show()
 
     def choose_useful(self, usefulness_percent=0.05): #at least 5% useful area (?)
-        # return nr of useful&useless
-        # save useful in useful folder
-        useless=0
-        useful=0
+        useless = 0
+        useful = 0
 
         img_list = os.listdir(self.patches_images_dir)
         msk_list = os.listdir(self.patches_masks_dir)
 
-        for img in range(len(img_list)):   #using t1_list as all lists are of same size
-            img_name=img_list[img]
+        for img in range(len(img_list)):   
+            img_name = img_list[img]
             mask_name = msk_list[img]
             print("Now preparing image and masks number: ", img)
             
-            temp_image=cv2.imread(self.patches_images_dir+'/'+img_list[img], 1)
-        
-            temp_mask=cv2.imread(self.patches_masks_dir+'/'+msk_list[img], 0)
-            #temp_mask=temp_mask.astype(np.uint8)
+            temp_image = cv2.imread(self.patches_images_dir+'/'+img_list[img], 1)
+            temp_mask = cv2.imread(self.patches_masks_dir+'/'+msk_list[img], 0)
             
             val, counts = np.unique(temp_mask, return_counts=True)
-            
-            if (1 - (counts[0]/counts.sum())) > usefulness_percent: 
+            if self.ignore_class is not None:
+                ignore = self.ignore_class
+            else: 
+                ignore = 0
+            if (1 - (counts[ignore]/counts.sum())) > usefulness_percent: 
                 print("Save Me")
-                useful+=1        
+                useful += 1        
                 if os.path.exists(self.useful_images_dir+'/'+img_name):
                     print(f"Tile already exists, skipping")  
                     continue
@@ -295,10 +321,9 @@ class DatasetProcessor:
                 
             else:
                 print("I am useless")   
-                useless +=1
+                useless += 1
         
-        print(f'Useful = {useful}, useles = {useless}')
-        pass
+        print(f'Useful = {useful}, useless = {useless}')
 
     def divide_train_val_test(self, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1):
         patch_files = [f for f in os.listdir(self.patches_images_dir) if f.endswith('.png')]
@@ -329,61 +354,8 @@ class DatasetProcessor:
             os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.test_images_dir}/'")
             os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.test_masks_dir}/'")
         
-        print(f"Train: {len(train_files)}, Val: {len(val_files)}, Test: {len(test_files)}")  # Fixed syntax
+        print(f"Train: {len(train_files)}, Val: {len(val_files)}, Test: {len(test_files)}")
 
-
-    # def calculate_class_weights(self, masks_dir=None):
-    #     # compute inverse frequency weights for imbalanced classes
-    #     if masks_dir is None:
-    #         masks_dir = self.train_masks_dir
-        
-    #     print(f"Class weights from {masks_dir}...")
-        
-    #     class_pixel_counts = {}
-    #     total_pixels = 0
-        
-    #     mask_files = [f for f in os.listdir(masks_dir) if f.endswith('.png')]
-        
-    #     if not mask_files:
-    #         print("No mask files found :(")
-    #         return None
-        
-    #     for mask_file in mask_files:
-    #         mask_path = os.path.join(masks_dir, mask_file)
-    #         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-            
-    #         if mask is not None:
-    #             labels, counts = np.unique(mask, return_counts=True)
-                
-    #             for label, count in zip(labels, counts):
-    #                 if label not in class_pixel_counts:
-    #                     class_pixel_counts[label] = 0
-    #                 class_pixel_counts[label] += count
-    #                 total_pixels += count
-        
-    #     if total_pixels == 0:
-    #         print("Smth wrong, total pix = 0")
-    #         return None
-        
-    #     class_weights = {}
-    #     for label, count in class_pixel_counts.items():
-    #         frequency = count / total_pixels
-    #         weight = 1.0 / frequency
-    #         class_weights[label] = weight
-        
-    #     #normalization
-    #     avg_weight = np.mean(list(class_weights.values()))
-    #     for label in class_weights:
-    #         class_weights[label] /= avg_weight
-        
-    #     print("class weights:")
-    #     for label, weight in class_weights.items():
-    #         count = class_pixel_counts[label]
-    #         percentage = (count / total_pixels) * 100
-    #         print(f"Class {label}: weight={weight:.4f}, pixels={count:,} ({percentage:.2f}%)")
-        
-    #     return class_weights
-    
     def calculate_class_weights(self, masks_dir=None):
         if masks_dir is None:
             masks_dir = self.train_masks_dir
@@ -420,7 +392,7 @@ class DatasetProcessor:
                 total_pixels += count
 
         if total_pixels == 0:
-            print("EROOR: Total pixels = 0. Check your mask files.")
+            print("ERROR: Total pixels = 0. Check your mask files.")
             return None
 
         class_weights = {
@@ -439,83 +411,248 @@ class DatasetProcessor:
             print(f"Class {label}: weight={weight:.4f}, pixels={count:,} ({percentage:.2f}%)")
 
         return class_weights
+    
+    #additional preprocessing after datagen
+    def preprocess_data(self, img, mask):
+        img = self.scaler.fit_transform(img.reshape(-1, img.shape[-1])).reshape(img.shape)
+        img = self.preprocess_input(img)  # Preprocess based on the pretrained backbone
+        
+        #one-hot encoding 
+        mask = to_categorical(mask, self.n_classes)
+        
+        return (img, mask)
 
+    def setup_model(self, backbone='resnet34'):
+        #model setup inspiration from https://youtu.be/0W6MKZqSke8
+        print(f"Setting up model with {backbone} backbone...")
+        
+        self.BACKBONE = backbone
+        self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
+        
+        #calc train params
+        num_train_imgs = len(os.listdir(self.train_images_dir))
+        num_val_images = len(os.listdir(self.val_images_dir))
+        
+        if num_train_imgs == 0 or num_val_images == 0:
+            print("ERROR: No training or validation images found!")
+            return
+        
+        self.steps_per_epoch = num_train_imgs // self.batch_size
+        self.val_steps_per_epoch = num_val_images // self.batch_size
+        
+        IMG_HEIGHT = self.patch
+        IMG_WIDTH = self.patch
+        IMG_CHANNELS = 3
 
-    def setup_model(self, model):
-        #get info about which model to load (maybe like a string or smth)
-        # return model parameters count or some summary?
-        pass
+        self.model = sm.Unet(
+            self.BACKBONE, 
+            encoder_weights='imagenet', 
+            input_shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
+            classes=self.n_classes, 
+            activation='softmax'
+        )
+        
+        self.model.compile(
+            'Adam', 
+            loss=sm.losses.categorical_focal_jaccard_loss, 
+            metrics=[sm.metrics.iou_score]
+        )
+        
+        print("Model compiled successfully!")
+        print(f"Model input shape: {self.model.input_shape}")
+        print(f"Steps per epoch: {self.steps_per_epoch}")
+        print(f"Validation steps: {self.val_steps_per_epoch}")
 
-    def paramters(self):
-        #training parameters for a specific model?
-        pass
+    def create_train_generator(self):
+        print("Creating training data generators...")
+        
+        img_data_gen_args = dict(
+            horizontal_flip=True,
+            vertical_flip=True,
+            fill_mode='reflect'
+        )
+        
+        image_datagen = ImageDataGenerator(**img_data_gen_args)
+        mask_datagen = ImageDataGenerator(**img_data_gen_args)
+        
+        image_generator = image_datagen.flow_from_directory(
+            self.train_images_dir,
+            class_mode=None,
+            batch_size=self.batch_size,
+            seed=self.seed,
+            target_size=(self.patch, self.patch)
+        )
+        
+        mask_generator = mask_datagen.flow_from_directory(
+            self.train_masks_dir,
+            class_mode=None,
+            color_mode='grayscale',
+            batch_size=self.batch_size,
+            seed=self.seed,
+            target_size=(self.patch, self.patch)
+        )
+        
+        val_image_generator = image_datagen.flow_from_directory(
+            self.val_images_dir,
+            class_mode=None,
+            batch_size=self.batch_size,
+            seed=self.seed,
+            target_size=(self.patch, self.patch)
+        )
+        
+        val_mask_generator = mask_datagen.flow_from_directory(
+            self.val_masks_dir,
+            class_mode=None,
+            color_mode='grayscale',
+            batch_size=self.batch_size,
+            seed=self.seed,
+            target_size=(self.patch, self.patch)
+        )
+        
+        def train_gen():
+            for (img, mask) in zip(image_generator, mask_generator):
+                img, mask = self.preprocess_data(img, mask)
+                yield (img, mask)
+                
+        def val_gen():
+            for (img, mask) in zip(val_image_generator, val_mask_generator):
+                img, mask = self.preprocess_data(img, mask)
+                yield (img, mask)
+        
+        self.train_img_gen = train_gen()
+        self.val_img_gen = val_gen()
+        
+        print("Data generators created successfully!")
 
     def train(self):
-        pass
+        if self.model is None:
+            print("ERROR: Model not initialized. Call setup_model() first!")
+            return
+            
+        if self.train_img_gen is None:
+            print("Creating data generators...")
+            self.create_train_generator()
+        
+        print(f"Starting training for {self.n_epochs} epochs...")
+        
+        self.history = self.model.fit(
+            self.train_img_gen,
+            steps_per_epoch=self.steps_per_epoch,
+            epochs=self.n_epochs,
+            verbose=1,
+            validation_data=self.val_img_gen,
+            validation_steps=self.val_steps_per_epoch
+        )
+        
+        model_filename = f'{self.dataset_name}_{self.n_epochs}_epochs_{self.BACKBONE}_backbone_batch{self.batch_size}_v{self.current_version}.hdf5'
+        self.model.save(model_filename)
+        print(f"Model saved as: {model_filename}")
+
+    def plot_statistics(self):
+        if self.history is None:
+            print("No training history found. Train the model first!")
+            return
+            
+        loss = self.history.history['loss']
+        val_loss = self.history.history['val_loss']
+        epochs = range(1, len(loss) + 1)
+        
+        plt.figure(figsize=(12, 4))
+        
+        plt.subplot(1, 2, 1)
+        plt.plot(epochs, loss, 'y', label='Training loss')
+        plt.plot(epochs, val_loss, 'r', label='Validation loss')
+        plt.title('Training and validation loss')
+        plt.xlabel('Epochs')
+        plt.ylabel('Loss')
+        plt.legend()
+
+        acc = self.history.history['iou_score']
+        val_acc = self.history.history['val_iou_score']
+
+        plt.subplot(1, 2, 2)
+        plt.plot(epochs, acc, 'y', label='Training IoU')
+        plt.plot(epochs, val_acc, 'r', label='Validation IoU')
+        plt.title('Training and validation IoU')
+        plt.xlabel('Epochs')
+        plt.ylabel('IoU')
+        plt.legend()
+        
+        plt.tight_layout()
+        plt.show()
 
     def save_checkpoint(self, epoch, model, optimizer, metrics):
-        #save model progress every x epoch, learning rate scheduler state, random seeds for reproducibility
-        pass
+        checkpoint_dir = self.checkpoints_dir
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        
+        checkpoint_path = f"{checkpoint_dir}/checkpoint_epoch_{epoch}.hdf5"
+        model.save(checkpoint_path)
+        
+        checkpoint_info = {
+            'epoch': epoch,
+            'dataset_name': self.dataset_name,
+            'backbone': self.BACKBONE,
+            'batch_size': self.batch_size,
+            'metrics': metrics
+        }
+        
+        info_path = f"{checkpoint_dir}/checkpoint_epoch_{epoch}_info.json"
+        with open(info_path, 'w') as f:
+            json.dump(checkpoint_info, f, indent=2)
+            
+        print(f"Checkpoint saved at epoch {epoch}")
 
-    def check_for_not_finished_training(self):
-        #return unfinished training parameters if found or false?
-        #resume from latest checkpoint, restore optimizer state and epoch number
-        pass
+    def check_for_unfinished_training(self):
+        checkpoint_dir = self.checkpoints_dir
+        
+        if not os.path.exists(checkpoint_dir):
+            print("No checkpoints found")
+            return False
+            
+        checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.endswith('.hdf5')]
+        
+        if not checkpoint_files:
+            print("No checkpoint files found")
+            return False
+            
+        #find latest checkpoint
+        latest_checkpoint = max(checkpoint_files, key=lambda x: int(x.split('_')[2].split('.')[0]))
+        latest_epoch = int(latest_checkpoint.split('_')[2].split('.')[0])
+        
+        checkpoint_path = f"{checkpoint_dir}/{latest_checkpoint}"
+        info_path = f"{checkpoint_dir}/checkpoint_epoch_{latest_epoch}_info.json"
+        
+        if os.path.exists(info_path):
+            with open(info_path, 'r') as f:
+                checkpoint_info = json.load(f)
+                
+            print(f"Found checkpoint at epoch {latest_epoch}")
+            print(f"Checkpoint info: {checkpoint_info}")
+            
+            return {
+                'checkpoint_path': checkpoint_path,
+                'epoch': latest_epoch,
+                'info': checkpoint_info
+            }
+        else:
+            print(f"Found checkpoint file but no info file: {latest_checkpoint}")
+            return {
+                'checkpoint_path': checkpoint_path,
+                'epoch': latest_epoch,
+                'info': None
+            }
 
-    def validate_data_integrity(self, images, masks):
-        #check for corrupted files, mismatched image-mask pairs, invalid class IDs
-        #plot random img+mask to check if it is ok
-        pass
+    def set_training_parameters(self, epochs=None, batch_size=None, backbone=None):
+        if epochs is not None:
+            self.n_epochs = epochs
+            print(f"Set epochs to: {self.n_epochs}")
+            
+        if batch_size is not None:
+            self.batch_size = batch_size
+            print(f"Set batch size to: {self.batch_size}")
+            
+        if backbone is not None:
+            self.BACKBONE = backbone
+            self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
+            print(f"Set backbone to: {self.BACKBONE}")
 
-    def convert_mask_into_labels(self):
-        #some datasets have rgb masks or other strange types (e.g. deepglobe), 
-        # so i want to standartize them in a way like landcoverai has (numbers from 0 to 5)
-        # found nice word for that - one-hot encoding
-        pass
-
-    def preprocess_image(self):
-        # normalize, resize, convert color channels, maybe cloud masking
-        pass
-
-
-    def preprocess_mask(mself):
-        # convert color-coded masks to integer class IDs, one-hot encoding if needed.
-        pass
-
-    def augment_data(self, images, masks):
-        #apply random flips, rotations, brightness changes, noise injection, etc
-
-        #I guess woulnt need that, as the datsets are pretty big
-        pass
-
-    def evaluate(self, model, dataloader):
-        #compute IoU, precision, recall, F1/Dice.
-        pass
-
-    def plot_sample_predictions(self, model, images, masks):
-        # visual sanity check of model output during/after training
-        pass
-
-    def stitch_tiles(self, predictions, original_image_shape):
-        #recombine tiles back into full-size satellite image masks
-        pass
-
-    def export_results(self, predictions, output_path):
-        #save predictions in georeferenced format (GeoTIFF, etc.) - maybe for later
-        pass
-
-    def learning_rate_scheduler(self, optimizer, epoch, metrics):
-        #adjust learning rate based on validation performance
-        pass
-
-    def early_stopping_check(self, val_metrics, patience):
-        #stop training when validation metrics dont change much
-        pass
-
-    def post_process_predictions(self, predictions):
-        #apply CRF, morphological operations, or filtering to clean up predictions
-        pass
-
-    def ensemble_predictions(self, model_list, image):
-        #combine predictions from multiple models for better accuracy
-        pass

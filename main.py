@@ -29,7 +29,7 @@ np.random.seed(seed)
 # tf.random.set_seed(seed)
 random.seed(seed)
 
-labels, count = dataset.analyze_sample()
+#labels, count = dataset.analyze_sample()
 
 #num_patches = dataset.into_tiles(patch_size, overlap_size=64)
 #print(f'Num patches = {num_patches}')
@@ -37,8 +37,9 @@ labels, count = dataset.analyze_sample()
 #dataset.plot_img_n_mask(dataset.dataset_dir, 10)
 
 #dataset.choose_useful()
-#print(f'{dataset.useful_images_dir}')
+print(f'{dataset.useful_images_dir}')
 #dataset.plot_img_n_mask(f'{dataset.output_dir}/useful_patches', 10)
-#dataset.divide_train_val_test()
+dataset.divide_train_val_test()
 
 dataset.calculate_class_weights(dataset.useful_masks_dir)
+
