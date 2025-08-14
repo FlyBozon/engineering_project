@@ -20,9 +20,9 @@ current_dataset = "landcover.ai"
 
 processor = DatasetProcessor(current_dataset)
 
-processor.into_tiles(256)
-processor.choose_useful(0.05)
-processor.divide_train_val_test()
+# processor.into_tiles(256)
+# processor.choose_useful(0.05)
+# processor.divide_train_val_test()
 
 processor.setup_model('resnet34')
 processor.train()  

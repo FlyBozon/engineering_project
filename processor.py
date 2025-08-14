@@ -11,7 +11,7 @@ from sklearn.preprocessing import MinMaxScaler
 from keras.utils import to_categorical
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import tensorflow as tf
-tf.compat.v1.disable_eager_execution() 
+#tf.compat.v1.disable_eager_execution() 
 from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
 import datetime
 
@@ -75,12 +75,12 @@ class DatasetProcessor:
         self.patches_masks_dir = f'{self.output_dir}/{self.patch}_patches/masks'
         self.useful_images_dir = f'{self.output_dir}/useful_patches/images'
         self.useful_masks_dir = f'{self.output_dir}/useful_patches/masks'
-        self.train_images_dir = f'{self.output_dir}/data_for_training/train_images/train'
-        self.train_masks_dir = f'{self.output_dir}/data_for_training/train_masks/train'
-        self.val_images_dir = f'{self.output_dir}/data_for_training/val_images/val'
-        self.val_masks_dir = f'{self.output_dir}/data_for_training/val_masks/val'
-        self.test_images_dir = f'{self.output_dir}/data_for_training/test_images/test'
-        self.test_masks_dir = f'{self.output_dir}/data_for_training/test_masks/test'
+        self.train_images_dir = f'{self.output_dir}/data_for_training/train_images'
+        self.train_masks_dir = f'{self.output_dir}/data_for_training/train_masks'
+        self.val_images_dir = f'{self.output_dir}/data_for_training/val_images'
+        self.val_masks_dir = f'{self.output_dir}/data_for_training/val_masks'
+        self.test_images_dir = f'{self.output_dir}/data_for_training/test_images'
+        self.test_masks_dir = f'{self.output_dir}/data_for_training/test_masks'
         self.checkpoints_dir = f'{self.output_dir}/checkpoints'
         self.models_dir = f'{self.output_dir}/models'
         
@@ -343,22 +343,22 @@ class DatasetProcessor:
         test_files = patch_files[val_end:]
         
         for filename in train_files:
-            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.train_images_dir}/'")
-            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.train_masks_dir}/'")
+            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.train_images_dir}/train/'")
+            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.train_masks_dir}/train/'")
         
         for filename in val_files:
-            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.val_images_dir}/'")
-            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.val_masks_dir}/'")
+            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.val_images_dir}/val/'")
+            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.val_masks_dir}/val/'")
         
         for filename in test_files:
-            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.test_images_dir}/'")
-            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.test_masks_dir}/'")
+            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.test_images_dir}/test/'")
+            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.test_masks_dir}/test/'")
         
         print(f"Train: {len(train_files)}, Val: {len(val_files)}, Test: {len(test_files)}")
 
     def calculate_class_weights(self, masks_dir=None):
         if masks_dir is None:
-            masks_dir = self.train_masks_dir
+            masks_dir = self.train_masks_dir+"/train"
         
         print(f"Class weights from {masks_dir}...")
         
@@ -452,12 +452,30 @@ class DatasetProcessor:
             activation='softmax'
         )
         
-        self.model.compile(
-            'Adam', 
-            loss=sm.losses.categorical_focal_jaccard_loss, 
-            metrics=[sm.metrics.iou_score]
-        )
+        # self.model.compile(
+        #     'Adam', 
+        #     loss=sm.losses.categorical_focal_jaccard_loss, 
+        #     metrics=[sm.metrics.iou_score]
+        # )
         
+        # self.model.compile(
+        #     optimizer='Adam', 
+        #     loss='categorical_crossentropy', 
+        #     metrics=[sm.metrics.iou_score]
+        # )
+
+        # self.model.compile(
+        #     optimizer='adam',
+        #     loss='categorical_crossentropy',
+        #     metrics=['accuracy', custom_iou_metric]
+        # )
+
+        self.model.compile(
+            optimizer='adam',
+            loss='categorical_crossentropy',  # Tymczasowe
+            metrics=['accuracy']
+        )
+
         print("Model compiled successfully!")
         print(f"Model input shape: {self.model.input_shape}")
         print(f"Steps per epoch: {self.steps_per_epoch}")
@@ -535,6 +553,14 @@ class DatasetProcessor:
         
         print("Calc class weights...")
         self.apply_class_weights()
+
+        print("Re-compiling model with weighted loss...")
+        self.model.compile(
+            optimizer='adam',
+            loss=weighted_categorical_crossentropy(self.class_weight_dict),
+            metrics=['accuracy', custom_iou_metric]
+        )
+        print("Model re-compiled with class weights!")
         
         callbacks = []
         
@@ -579,8 +605,8 @@ class DatasetProcessor:
             verbose=1,
             validation_data=self.val_img_gen,
             validation_steps=self.val_steps_per_epoch,
-            callbacks=callbacks,
-            class_weight=self.class_weight_dict  
+            callbacks=callbacks
+            #class_weight=self.class_weight_dict  
         )
         
         model_filename = f'{self.dataset_name}_{self.n_epochs}_epochs_{self.BACKBONE}_backbone_batch{self.batch_size}_v{self.current_version}.keras'
@@ -721,3 +747,29 @@ class DatasetProcessor:
         print(f"TensorBoard logs will be saved to: {log_dir}")
         print(f"To view: tensorboard --logdir {log_dir}")
         return self.tensorboard_callback
+
+
+def custom_iou_metric(y_true, y_pred):
+    y_pred = tf.argmax(y_pred, axis=-1)
+    y_true = tf.argmax(y_true, axis=-1)
+    
+    intersection = tf.reduce_sum(tf.cast(y_true * y_pred, tf.float32))
+    union = tf.reduce_sum(tf.cast(y_true + y_pred, tf.float32)) - intersection
+    
+    return intersection / (union + tf.keras.backend.epsilon())
+
+def weighted_categorical_crossentropy(class_weights):
+    def loss_function(y_true, y_pred):
+        weights_tensor = tf.constant([class_weights[i] for i in range(len(class_weights))], dtype=tf.float32)
+        
+        y_true_indices = tf.argmax(y_true, axis=-1)
+        
+        pixel_weights = tf.gather(weights_tensor, y_true_indices)
+        
+        cce = tf.keras.losses.categorical_crossentropy(y_true, y_pred)
+        
+        weighted_cce = cce * pixel_weights
+        
+        return tf.reduce_mean(weighted_cce)
+    
+    return loss_function
