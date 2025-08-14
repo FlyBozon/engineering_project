@@ -47,10 +47,13 @@ class DatasetProcessor:
         self.patches_masks_dir = f'{self.output_dir}/{self.patch}_patches/masks'
         self.useful_images_dir = f'{self.output_dir}/useful_patches/images'
         self.useful_masks_dir = f'{self.output_dir}/useful_patches/masks'
-        self.train_images_dir = f'{self.output_dir}/data_for_training/train_images/train'
-        self.train_masks_dir = f'{self.output_dir}/data_for_training/train_masks/train'
-        self.val_images_dir = f'{self.output_dir}/data_for_training/val_images/val'
-        self.val_masks_dir = f'{self.output_dir}/data_for_training/val_masks/val'
+        self.train_images_dir = f'{self.output_dir}/data_for_training/train/images'
+        self.train_masks_dir = f'{self.output_dir}/data_for_training/train/masks'
+        self.val_images_dir = f'{self.output_dir}/data_for_training/val/images'
+        self.val_masks_dir = f'{self.output_dir}/data_for_training/val/masks'
+        self.test_images_dir = f'{self.output_dir}/data_for_training/test/images'
+        self.test_masks_dir = f'{self.output_dir}/data_for_training/test/masks'
+        
         
         dirs = [
             self.patches_images_dir,
@@ -60,7 +63,9 @@ class DatasetProcessor:
             self.train_images_dir,
             self.train_masks_dir,
             self.val_images_dir,
-            self.val_masks_dir
+            self.val_masks_dir,
+            self.test_images_dir,
+            self.test_masks_dir
         ]
         
         for dir_path in dirs:
@@ -295,11 +300,37 @@ class DatasetProcessor:
         print(f'Useful = {useful}, useles = {useless}')
         pass
 
-    def divide_train_val_test(self):
-        #create/check if previously created folders
-        pass
-
-
+    def divide_train_val_test(self, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1):
+        patch_files = [f for f in os.listdir(self.patches_images_dir) if f.endswith('.png')]
+        
+        if len(patch_files) == 0:
+            print("No patches found!")
+            return
+        
+        random.shuffle(patch_files)
+        
+        total = len(patch_files)
+        train_end = int(total * train_ratio)
+        val_end = int(total * (train_ratio + val_ratio))
+        
+        train_files = patch_files[:train_end]
+        val_files = patch_files[train_end:val_end]
+        test_files = patch_files[val_end:]
+        
+        for filename in train_files:
+            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.train_images_dir}/'")
+            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.train_masks_dir}/'")
+        
+        for filename in val_files:
+            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.val_images_dir}/'")
+            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.val_masks_dir}/'")
+        
+        for filename in test_files:
+            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.test_images_dir}/'")
+            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.test_masks_dir}/'")
+        
+        print(f"Train: {len(train_files)}, Val: {len(val_files)}, Test: {len(test_files)}")  # Fixed syntax
+        
     def setup_model(self, model):
         #get info about which model to load (maybe like a string or smth)
         # return model parameters count or some summary?

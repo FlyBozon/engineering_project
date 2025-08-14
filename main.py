@@ -38,5 +38,5 @@ random.seed(seed)
 
 #dataset.choose_useful()
 #print(f'{dataset.useful_images_dir}')
-dataset.plot_img_n_mask(f'{dataset.output_dir}/useful_patches', 10)
-
+#dataset.plot_img_n_mask(f'{dataset.output_dir}/useful_patches', 10)
+dataset.divide_train_val_test()
