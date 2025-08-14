@@ -40,3 +40,5 @@ labels, count = dataset.analyze_sample()
 #print(f'{dataset.useful_images_dir}')
 #dataset.plot_img_n_mask(f'{dataset.output_dir}/useful_patches', 10)
 #dataset.divide_train_val_test()
+
+dataset.calculate_class_weights(dataset.useful_masks_dir)

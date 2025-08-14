@@ -332,27 +332,114 @@ class DatasetProcessor:
         print(f"Train: {len(train_files)}, Val: {len(val_files)}, Test: {len(test_files)}")  # Fixed syntax
 
 
-    def calculate_class_weights(self, labels=not None, counts=not None, masks_dir=None):
-        # compute inverse frequency weights for imbalanced classes
-        total_pixels = np.sum(counts)
+    # def calculate_class_weights(self, masks_dir=None):
+    #     # compute inverse frequency weights for imbalanced classes
+    #     if masks_dir is None:
+    #         masks_dir = self.train_masks_dir
         
-        class_weights = {}
-        for label, count in zip(labels, counts):
-            frequency = count / total_pixels
-            weight = 1.0 / frequency
-            class_weights[label] = weight
+    #     print(f"Class weights from {masks_dir}...")
         
+    #     class_pixel_counts = {}
+    #     total_pixels = 0
+        
+    #     mask_files = [f for f in os.listdir(masks_dir) if f.endswith('.png')]
+        
+    #     if not mask_files:
+    #         print("No mask files found :(")
+    #         return None
+        
+    #     for mask_file in mask_files:
+    #         mask_path = os.path.join(masks_dir, mask_file)
+    #         mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+            
+    #         if mask is not None:
+    #             labels, counts = np.unique(mask, return_counts=True)
+                
+    #             for label, count in zip(labels, counts):
+    #                 if label not in class_pixel_counts:
+    #                     class_pixel_counts[label] = 0
+    #                 class_pixel_counts[label] += count
+    #                 total_pixels += count
+        
+    #     if total_pixels == 0:
+    #         print("Smth wrong, total pix = 0")
+    #         return None
+        
+    #     class_weights = {}
+    #     for label, count in class_pixel_counts.items():
+    #         frequency = count / total_pixels
+    #         weight = 1.0 / frequency
+    #         class_weights[label] = weight
+        
+    #     #normalization
+    #     avg_weight = np.mean(list(class_weights.values()))
+    #     for label in class_weights:
+    #         class_weights[label] /= avg_weight
+        
+    #     print("class weights:")
+    #     for label, weight in class_weights.items():
+    #         count = class_pixel_counts[label]
+    #         percentage = (count / total_pixels) * 100
+    #         print(f"Class {label}: weight={weight:.4f}, pixels={count:,} ({percentage:.2f}%)")
+        
+    #     return class_weights
+    
+    def calculate_class_weights(self, masks_dir=None):
+        if masks_dir is None:
+            masks_dir = self.train_masks_dir
+        
+        print(f"Class weights from {masks_dir}...")
+        
+        if not os.path.exists(masks_dir):
+            print(f"dir {masks_dir} doesnt exist.")
+            return None
+
+        mask_files = [f for f in os.listdir(masks_dir) if f.endswith('.png')]
+        if not mask_files:
+            print("No mask files found :(")
+            return None
+
+        class_pixel_counts = {}
+        total_pixels = 0
+
+        for mask_file in mask_files:
+            mask_path = os.path.join(masks_dir, mask_file)
+            mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+
+            if mask is None:
+                print(f"Warning: couldnt read {mask_file}. Skipping.")
+                continue
+
+            if mask.size == 0:
+                print(f"Warning: empty mask {mask_file}. Skipping.")
+                continue
+
+            labels, counts = np.unique(mask, return_counts=True)
+            for label, count in zip(labels, counts):
+                class_pixel_counts[label] = class_pixel_counts.get(label, 0) + count
+                total_pixels += count
+
+        if total_pixels == 0:
+            print("EROOR: Total pixels = 0. Check your mask files.")
+            return None
+
+        class_weights = {
+            label: (1.0 / (count / total_pixels))
+            for label, count in class_pixel_counts.items()
+        }
+
+        #normalize
         avg_weight = np.mean(list(class_weights.values()))
-        for label in class_weights:
-            class_weights[label] /= avg_weight
-        
-        print("Class weights:")
+        class_weights = {label: w / avg_weight for label, w in class_weights.items()}
+
+        print("class weights:")
         for label, weight in class_weights.items():
-            count = counts[np.where(labels == label)[0][0]]
+            count = class_pixel_counts[label]
             percentage = (count / total_pixels) * 100
-            print(f"  Class {label}: weight={weight:.4f}, pixels={count:,} ({percentage:.2f}%)")
-        
+            print(f"Class {label}: weight={weight:.4f}, pixels={count:,} ({percentage:.2f}%)")
+
         return class_weights
+
 
     def setup_model(self, model):
         #get info about which model to load (maybe like a string or smth)
