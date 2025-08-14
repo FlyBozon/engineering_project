@@ -18,28 +18,13 @@ from processor import *
 datasets_info = "datasets_info.json"
 current_dataset = "landcover.ai"
 
-dataset = DatasetProcessor(current_dataset, datasets_info)
+processor = DatasetProcessor(current_dataset)
 
-patch_size = 256
-batch_size = 16 
-seed = 42
+processor.into_tiles(256)
+processor.choose_useful(0.05)
+processor.divide_train_val_test()
 
-#random seeds for reproducibility
-np.random.seed(seed)
-# tf.random.set_seed(seed)
-random.seed(seed)
+processor.setup_model('resnet34')
+processor.train()  
 
-#labels, count = dataset.analyze_sample()
-
-#num_patches = dataset.into_tiles(patch_size, overlap_size=64)
-#print(f'Num patches = {num_patches}')
-
-#dataset.plot_img_n_mask(dataset.dataset_dir, 10)
-
-#dataset.choose_useful()
-print(f'{dataset.useful_images_dir}')
-#dataset.plot_img_n_mask(f'{dataset.output_dir}/useful_patches', 10)
-dataset.divide_train_val_test()
-
-dataset.calculate_class_weights(dataset.useful_masks_dir)
-
+processor.plot_statistics()

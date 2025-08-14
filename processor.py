@@ -533,6 +533,43 @@ class DatasetProcessor:
             print("Creating data generators...")
             self.create_train_generator()
         
+        print("Calc class weights...")
+        self.apply_class_weights()
+        
+        callbacks = []
+        
+        tensorboard_cb = self.setup_tensorboard()
+        callbacks.append(tensorboard_cb)
+        
+        checkpoint_path = f"{self.checkpoints_dir}/best_model.hdf5"
+        os.makedirs(self.checkpoints_dir, exist_ok=True)
+        checkpoint_cb = ModelCheckpoint(
+            checkpoint_path,
+            monitor='val_iou_score',
+            save_best_only=True,
+            mode='max',
+            verbose=1
+        )
+        callbacks.append(checkpoint_cb)
+        
+        early_stop_cb = EarlyStopping(
+            monitor='val_iou_score',
+            patience=10,
+            mode='max',
+            verbose=1,
+            restore_best_weights=True
+        )
+        callbacks.append(early_stop_cb)
+        
+        lr_reduce_cb = ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.5,
+            patience=5,
+            min_lr=1e-7,
+            verbose=1
+        )
+        callbacks.append(lr_reduce_cb)
+        
         print(f"Starting training for {self.n_epochs} epochs...")
         
         self.history = self.model.fit(
@@ -541,12 +578,15 @@ class DatasetProcessor:
             epochs=self.n_epochs,
             verbose=1,
             validation_data=self.val_img_gen,
-            validation_steps=self.val_steps_per_epoch
+            validation_steps=self.val_steps_per_epoch,
+            callbacks=callbacks,
+            class_weight=self.class_weight_dict  
         )
         
         model_filename = f'{self.dataset_name}_{self.n_epochs}_epochs_{self.BACKBONE}_backbone_batch{self.batch_size}_v{self.current_version}.hdf5'
         self.model.save(model_filename)
-        print(f"Model saved as: {model_filename}")
+        print(f"Final model saved as: {model_filename}")
+        print(f"Best model saved as: {checkpoint_path}")
 
     def plot_statistics(self):
         if self.history is None:
@@ -656,3 +696,28 @@ class DatasetProcessor:
             self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
             print(f"Set backbone to: {self.BACKBONE}")
 
+    def apply_class_weights(self):
+        class_weights = self.calculate_class_weights()
+        if class_weights is not None:
+            self.class_weight_dict = {i: class_weights.get(i, 1.0) for i in range(self.n_classes)}
+            print(f"applied class weights: {self.class_weight_dict}")
+            return self.class_weight_dict
+        return None
+    
+    def setup_tensorboard(self):
+        os.makedirs(self.tensorboard_dir, exist_ok=True)
+        
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        log_dir = f"{self.tensorboard_dir}/{self.dataset_name}_{self.BACKBONE}_{timestamp}"
+        
+        self.tensorboard_callback = TensorBoard(
+            log_dir=log_dir,
+            histogram_freq=1,  
+            write_graph=True, 
+            write_images=True,  
+            update_freq='epoch'  
+        )
+        
+        print(f"TensorBoard logs will be saved to: {log_dir}")
+        print(f"To view: tensorboard --logdir {log_dir}")
+        return self.tensorboard_callback
