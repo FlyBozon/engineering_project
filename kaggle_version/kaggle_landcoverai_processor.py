@@ -1,3 +1,6 @@
+# code that was tested on kaggle with landcover.ai dataset
+# for deepglobe dataset would modify that code much, so it would be another version of it
+
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
@@ -20,7 +23,7 @@ import segmentation_models as sm
 class DatasetProcessor:
     def __init__(self, dataset_name, dataset_info_path="datasets_info.json", input_dir="datasets"):
         self.dataset_name = dataset_name
-        self.input_dir = input_dir
+        self.input_dir = INPUT_dataset_DIR #input_dir
         
         self._load_dataset_info(dataset_info_path)
         self._setup_paths()
@@ -94,7 +97,15 @@ class DatasetProcessor:
             self.val_images_dir,
             self.val_masks_dir,
             self.test_images_dir,
-            self.test_masks_dir
+            self.test_masks_dir,
+            f'{self.train_images_dir}/train',
+            f'{self.train_masks_dir}/train',
+            f'{self.val_images_dir}/val',
+            f'{self.val_masks_dir}/val',
+            f'{self.test_images_dir}/test',
+            f'{self.test_masks_dir}/test',
+            self.checkpoints_dir, 
+            self.models_dir
         ]
         
         for dir_path in dirs:
@@ -115,7 +126,7 @@ class DatasetProcessor:
             
         return labels, count
     
-    def into_tiles(self, patch_size, overlap_size=0):
+    def into_tiles(self, patch_size, overlap_size=64):
         print(f"Creating {patch_size}x{patch_size} patches with {overlap_size} overlap...")
         
         step = patch_size - overlap_size if overlap_size > 0 else patch_size
@@ -232,7 +243,7 @@ class DatasetProcessor:
                     patch_name = f"{base_name}_patch_{row}_{col}.png"
                     output_file_path = f"{output_path}/{patch_name}"
                     if os.path.exists(output_file_path):
-                        print(f"Tile already exists, skipping: {patch_name}")
+                        #print(f"Tile already exists, skipping: {patch_name}")
                         tile_count += 1  
                         continue
                     success = cv2.imwrite(output_file_path, single_patch)
@@ -299,7 +310,7 @@ class DatasetProcessor:
         for img in range(len(img_list)):   
             img_name = img_list[img]
             mask_name = msk_list[img]
-            print("Now preparing image and masks number: ", img)
+            #print("Now preparing image and masks number: ", img)
             
             temp_image = cv2.imread(self.patches_images_dir+'/'+img_list[img], 1)
             temp_mask = cv2.imread(self.patches_masks_dir+'/'+msk_list[img], 0)
@@ -310,16 +321,16 @@ class DatasetProcessor:
             else: 
                 ignore = 0
             if (1 - (counts[ignore]/counts.sum())) > usefulness_percent: 
-                print("Save Me")
+                #print("Save Me")
                 useful += 1        
                 if os.path.exists(self.useful_images_dir+'/'+img_name):
-                    print(f"Tile already exists, skipping")  
+                    #print(f"Tile already exists, skipping")  
                     continue
                 cv2.imwrite(self.useful_images_dir+'/'+img_name, temp_image)
                 cv2.imwrite(self.useful_masks_dir+'/'+mask_name, temp_mask)
                 
             else:
-                print("I am useless")   
+                #print("I am useless")   
                 useless += 1
         
         print(f'Useful = {useful}, useless = {useless}')
@@ -411,17 +422,20 @@ class DatasetProcessor:
 
         return class_weights
     
-    #additional preprocessing after datagen
+    # additional preprocessing after datagen
     def preprocess_data(self, img, mask):
-        img = self.scaler.fit_transform(img.reshape(-1, img.shape[-1])).reshape(img.shape)
-        img = self.preprocess_input(img)  # Preprocess based on the pretrained backbone
+        # img = self.scaler.fit_transform(img.reshape(-1, img.shape[-1])).reshape(img.shape)
+        # img = self.preprocess_input(img)  # Preprocess based on the pretrained backbone
         
-        #one-hot encoding 
-        mask = to_categorical(mask, self.n_classes)
+        #normalize images to 0-1 range manually (instead of MinMaxScaler)
+        img = img.astype(np.float32) / 255.0
+        
+        img = self.preprocess_input(img)
+        
+        mask = to_categorical(mask, self.n_classes).astype(np.float32)
         
         return (img, mask)
-
-        
+            
 
     def setup_model(self, backbone='resnet34'):
         #model setup inspiration from https://youtu.be/0W6MKZqSke8
@@ -465,7 +479,14 @@ class DatasetProcessor:
         #     loss=sm.losses.categorical_focal_jaccard_loss, 
         #     metrics=[sm.metrics.iou_score]
         # )
-        
+
+
+        self.model.compile(
+            optimizer='adam',
+            loss='categorical_crossentropy', 
+            metrics=['accuracy', sm.metrics.iou_score]
+        )
+
         # self.model.compile(
         #     optimizer='Adam', 
         #     loss='categorical_crossentropy', 
@@ -478,11 +499,11 @@ class DatasetProcessor:
         #     metrics=['accuracy', custom_iou_metric]
         # )
 
-        self.model.compile(
-            optimizer='adam',
-            loss='categorical_crossentropy', 
-            metrics=['accuracy']
-        )
+        # self.model.compile(
+        #     optimizer='adam',
+        #     loss='categorical_crossentropy', 
+        #     metrics=['accuracy']
+        # )
 
         print("Model compiled successfully!")
         print(f"Model input shape: {self.model.input_shape}")
@@ -562,11 +583,19 @@ class DatasetProcessor:
         print("Calc class weights...")
         self.apply_class_weights()
 
+        # print("Re-compiling model with weighted loss...")
+        # self.model.compile(
+        #     optimizer='adam',
+        #     loss=weighted_categorical_crossentropy(self.class_weight_dict),
+        #     metrics=['accuracy', custom_iou_metric]
+        # )
+        # print("Model re-compiled with class weights!")
+
         print("Re-compiling model with weighted loss...")
         self.model.compile(
             optimizer='adam',
             loss=weighted_categorical_crossentropy(self.class_weight_dict),
-            metrics=['accuracy', custom_iou_metric]
+            metrics=['accuracy', sm.metrics.iou_score]  # Use standard sm.metrics
         )
         print("Model re-compiled with class weights!")
         
@@ -594,6 +623,24 @@ class DatasetProcessor:
             restore_best_weights=True
         )
         callbacks.append(early_stop_cb)
+
+        # checkpoint_cb = ModelCheckpoint(
+        #     checkpoint_path,
+        #     monitor='val_custom_iou_metric', 
+        #     save_best_only=True,
+        #     mode='max',
+        #     verbose=1
+        # )
+        # callbacks.append(checkpoint_cb)
+        
+        # early_stop_cb = EarlyStopping(
+        #     monitor='val_custom_iou_metric',
+        #     patience=10,
+        #     mode='max',
+        #     verbose=1,
+        #     restore_best_weights=True
+        # )
+        # callbacks.append(early_stop_cb)
         
         lr_reduce_cb = ReduceLROnPlateau(
             monitor='val_loss',

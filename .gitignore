@@ -4,6 +4,7 @@ training/bogoo-wogoo/
 saved_parameters.json
 output_landcover.ai.v1/
 out/
+logs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
