@@ -5,6 +5,9 @@ saved_parameters.json
 output_landcover.ai.v1/
 out/
 logs/
+output_deepglobe/
+best_model/
+kaggle_version/deepglobe/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

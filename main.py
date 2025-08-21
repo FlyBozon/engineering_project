@@ -16,15 +16,25 @@ from tensorflow import keras
 from processor import *
 
 datasets_info = "datasets_info.json"
-current_dataset = "landcover.ai"
+current_dataset ="landcover.ai" #"deepglobe" 
 
 processor = DatasetProcessor(current_dataset)
+#processor.color_mask_processing()
+#processor.plot_img_n_mask("datasets/deepglobe", 20)
 
-# processor.into_tiles(256)
-# processor.choose_useful(0.05)
-# processor.divide_train_val_test()
+processor.into_tiles(256)
+processor.choose_useful(0.05)
+processor.divide_train_val_test()
 
 processor.setup_model('resnet34')
+# dataset.train("unet", "resnet34")
+# dataset.train("unet", "resnet50") 
+# dataset.train("unet", "efficientnetb0")
+
+# dataset.train("deeplabv3", "resnet34")
+# dataset.train("fpn", "efficientnetb0")
+# dataset.train("linknet", "resnet50")
+
 processor.train()  
 
 processor.plot_statistics()

@@ -30,3 +30,8 @@ after dividing tiles into training patches some of them are fuly unlabeled, so t
 defined order - deepglobe (generic lands), landcoverai (more specific, but less nr of classes), inria (only building/not building classes)
 
 generaly can have problems later, as datasets have around 0.5m/px, when real free available data - 10m/px
+
+### DeepGlobe 
+dataset has 3 folders train, val and test. Only train has masks. Every image ends with _sat or _mask depending on what is it. Images are 2448x2448. In train set there are 803 satelite images and same number of masks. After patchifying we would get aroung 74k images => that amoung is enoght to train a nn, so other folders with sat images without masks wouldnt be used. Masks are in rgb, so should be converted to 0-n_classes grayscale values. 
+
+Also for first testing training on kaggle, to not to use too many resources, and simply test if everything works correctly, would use only part of images (around 100/803), which must be enought for testing.

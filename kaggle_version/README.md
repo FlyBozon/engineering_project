@@ -1,0 +1,1 @@
+scripts version for testing on kaggle, to check if everything works correctly (or at least how I expect it to work)
