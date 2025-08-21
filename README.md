@@ -1,9 +1,12 @@
 ## tech stack
-Tensorflow2.x, OpenCV, NumPy/Matplotlib, Scikit-learn
+- TensorFlow >=2.16.0, Keras >=3.0.0
+- OpenCV (opencv-python) >=4.8.0, Pillow >=9.0.0
+- NumPy >=1.21.0, Matplotlib >=3.5.0, Scikit-learn >=1.1.0
+- Segmentation Models - Pre-trained encoder architectures
+- glob2 >=0.7, tqdm >=4.64.0
+- json5 >=0.9.0, random2 >=1.0.0, os (built-in)
+- clearml >=1.11.0
 
-Segmentation Models - Pre-trained encoder architectures
-
-## pip install
 `pip install -r requirements.txt`
 
 
