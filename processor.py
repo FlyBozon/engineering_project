@@ -16,6 +16,8 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import tensorflow as tf
 #tf.compat.v1.disable_eager_execution() 
 from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.optimizers.schedules import ExponentialDecay
+from tensorflow.keras.optimizers.schedules import CosineDecay
 import datetime
 
 import segmentation_models as sm
@@ -35,7 +37,7 @@ class DatasetProcessor:
         
         self.seed = 24
         self.batch_size = 16
-        self.n_epochs = 25
+        self.n_epochs = 100
         self.current_version = 1
         self.scaler = MinMaxScaler()
         self.BACKBONE = 'resnet34'  # default backbone
@@ -574,6 +576,35 @@ class DatasetProcessor:
         
         print("Data generators created successfully!")
 
+    def setup_lr_schedule(self, schedule_type='plateau'):
+        if schedule_type == 'plateau':
+            return ReduceLROnPlateau(
+                monitor='val_iou_score',
+                factor=0.2,
+                patience=7,
+                min_lr=1e-8,
+                mode='max',
+                verbose=1
+            )
+        elif schedule_type == 'exponential':
+            return ExponentialDecay(
+                initial_learning_rate=0.001,
+                decay_steps=self.steps_per_epoch * 8,
+                decay_rate=0.92,
+                staircase=True
+            )
+        elif schedule_type == 'cosine':
+            return CosineDecay(
+                initial_learning_rate=0.001,
+                decay_steps=self.steps_per_epoch * self.n_epochs
+            )
+        
+    def set_training_callbacks(self, early_patience=15, lr_patience=7, lr_factor=0.2):
+        self.early_patience = early_patience
+        self.lr_patience = lr_patience
+        self.lr_factor = lr_factor
+        print(f"Updated training callbacks: early_patience={early_patience}, lr_patience={lr_patience}")
+
     def train(self):
         if self.model is None:
             print("ERROR: Model not initialized. Call setup_model() first!")
@@ -620,18 +651,28 @@ class DatasetProcessor:
         
         early_stop_cb = EarlyStopping(
             monitor='val_iou_score',
-            patience=10,
+            patience=15 #10,
             mode='max',
             verbose=1,
-            restore_best_weights=True
+            restore_best_weights=True,
+            min_delta=0.001  #improvements > 0.1%
         )
         callbacks.append(early_stop_cb)
 
+        # lr_reduce_cb = ReduceLROnPlateau(
+        #     monitor='val_loss',
+        #     factor=0.5,
+        #     patience=5,
+        #     min_lr=1e-7,
+        #     verbose=1
+        # )
+
         lr_reduce_cb = ReduceLROnPlateau(
-            monitor='val_loss',
-            factor=0.5,
-            patience=5,
-            min_lr=1e-7,
+            monitor='val_iou_score',  
+            factor=0.2,  
+            patience=7, 
+            min_lr=1e-8,
+            mode='max', 
             verbose=1
         )
         callbacks.append(lr_reduce_cb)

@@ -18,7 +18,7 @@ from processor import *
 code_dir = "/scratch/markryku/engineering_project"
 data_dir = "/data/markryku/"
 
-datasets_info = f'{code_dir}/dataset_info.json' #"datasets_info.json"
+datasets_info = f'{code_dir}/datasets_info.json' #"datasets_info.json"
 current_dataset ="landcover.ai" #"deepglobe" 
 
 processor = DatasetProcessor(current_dataset, dataset_info_path=datasets_info)
