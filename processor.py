@@ -19,8 +19,13 @@ from tensorflow.keras.callbacks import TensorBoard, ModelCheckpoint, EarlyStoppi
 from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from tensorflow.keras.optimizers.schedules import CosineDecay
 import datetime
+from clearml import Task, Logger
+from clearml.binding.keras_bind import KerasCallback
 
+import os
+os.environ['SM_FRAMEWORK'] = 'tf.keras'
 import segmentation_models as sm
+
 
 code_dir = "/scratch/markryku/engineering_project"
 data_dir = "/data/markryku/"
@@ -617,6 +622,9 @@ class DatasetProcessor:
         print("Calc class weights...")
         self.apply_class_weights()
 
+        print("Setting up ClearML...")
+        self.setup_clearml()
+
         # print("Re-compiling model with weighted loss...")
         # self.model.compile(
         #     optimizer='adam',
@@ -635,6 +643,10 @@ class DatasetProcessor:
         
         callbacks = []
         
+
+        clearml_cb = self.setup_clearml_callback()
+        callbacks.append(clearml_cb)
+
         tensorboard_cb = self.setup_tensorboard()
         callbacks.append(tensorboard_cb)
         
@@ -651,7 +663,7 @@ class DatasetProcessor:
         
         early_stop_cb = EarlyStopping(
             monitor='val_iou_score',
-            patience=15 #10,
+            patience=15, #10,
             mode='max',
             verbose=1,
             restore_best_weights=True,
@@ -694,6 +706,16 @@ class DatasetProcessor:
         self.model.save(model_filename)
         print(f"Final model saved as: {model_filename}")
         print(f"Best model saved as: {checkpoint_path}")
+
+        if hasattr(self, 'task'):
+            self.task.upload_artifact(
+                name='final_model',
+                artifact_object=model_filename
+            )
+            
+            if self.history:
+                self.plot_statistics()  
+            print("Model and artifacts uploaded to ClearML")
 
     def plot_statistics(self):
         if self.history is None:
@@ -828,6 +850,56 @@ class DatasetProcessor:
         print(f"TensorBoard logs will be saved to: {log_dir}")
         print(f"To view: tensorboard --logdir {log_dir}")
         return self.tensorboard_callback
+    
+    def setup_clearml(self, project_name="Segmentation", task_name=None):
+        if task_name is None:
+            task_name = f"{self.dataset_name}_{self.BACKBONE}_patch{self.patch}"
+        
+        self.task = Task.init(
+            project_name=project_name,
+            task_name=task_name,
+            auto_connect_frameworks=True,  
+            auto_connect_arg_parser=True   
+        )
+        
+        self.task.connect({
+            'dataset_name': self.dataset_name,
+            'backbone': self.BACKBONE,
+            'patch_size': self.patch,
+            'batch_size': self.batch_size,
+            'epochs': self.n_epochs,
+            'n_classes': self.n_classes,
+            'seed': self.seed,
+            'class_weights': self.class_weight_dict if self.class_weight_dict else None
+        })
+        
+        self.logger = self.task.get_logger()
+        print(f"ClearML task initialized: {task_name}")
+        return self.task
+    
+    def setup_clearml_callback(self):
+        return KerasCallback()
+    
+    def log_to_clearml(self, epoch, logs):
+        if hasattr(self, 'logger'):
+            # Log custom metrics
+            for metric_name, value in logs.items():
+                self.logger.report_scalar(
+                    title="Training Metrics",
+                    series=metric_name,
+                    value=value,
+                    iteration=epoch
+                )
+            
+            # Log class distribution if available
+            if self.class_weight_dict:
+                for class_id, weight in self.class_weight_dict.items():
+                    self.logger.report_scalar(
+                        title="Class Weights",
+                        series=f"class_{class_id}",
+                        value=weight,
+                        iteration=0
+                    )
 
 
 def custom_iou_metric(y_true, y_pred):
