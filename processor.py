@@ -20,7 +20,7 @@ from tensorflow.keras.optimizers.schedules import ExponentialDecay
 from tensorflow.keras.optimizers.schedules import CosineDecay
 import datetime
 from clearml import Task, Logger
-from clearml.binding.keras_bind import KerasCallback
+from tensorflow.keras.callbacks import Callback
 
 import os
 os.environ['SM_FRAMEWORK'] = 'tf.keras'
@@ -29,6 +29,7 @@ import segmentation_models as sm
 
 code_dir = "/scratch/markryku/engineering_project"
 data_dir = "/data/markryku/"
+output_dir = "/data/markryku/output/"
 
 class DatasetProcessor:
     def __init__(self, dataset_name, dataset_info_path="datasets_info.json", input_dir="datasets"):
@@ -76,7 +77,7 @@ class DatasetProcessor:
     def _setup_paths(self):
         self.images_path = f"{self.input_dir}/{self.dataset_dir}/images"
         self.masks_path = f"{self.input_dir}/{self.dataset_dir}/masks"
-        self.output_dir = f"output_{self.dataset_dir}"
+        self.output_dir = f"{output_dir}output_{self.dataset_dir}"
         
         self.image_files = glob.glob(f"{self.images_path}/*.{self.img_format}")
         self.mask_files = glob.glob(f"{self.masks_path}/*.{self.mask_format}")
@@ -878,8 +879,29 @@ class DatasetProcessor:
         return self.task
     
     def setup_clearml_callback(self):
-        return KerasCallback()
-    
+        try:
+            from clearml.binding.keras_bind import KerasCallback
+            return KerasCallback()
+        except ImportError:
+            print("Warning: ClearML Keras binding not available, using basic callback")
+
+            class ClearMLCallback(Callback):
+                def __init__(self, logger):
+                    super().__init__()
+                    self.logger = logger
+                    
+                def on_epoch_end(self, epoch, logs=None):
+                    if logs and self.logger:
+                        for metric_name, value in logs.items():
+                            self.logger.report_scalar(
+                                title="Training",
+                                series=metric_name,
+                                value=value,
+                                iteration=epoch
+                            )
+            
+            return ClearMLCallback(self.logger if hasattr(self, 'logger') else None)
+        
     def log_to_clearml(self, epoch, logs):
         if hasattr(self, 'logger'):
             # Log custom metrics
