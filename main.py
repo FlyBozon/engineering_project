@@ -15,7 +15,7 @@ from tensorflow import keras
 
 from processor import *
 
-code_dir = "/scratches/markryku/engineering_project"
+code_dir = "/scratch/markryku/engineering_project"
 data_dir = "/data/markryku/"
 
 datasets_info = f'{code_dir}/dataset_info.json' #"datasets_info.json"

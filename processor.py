@@ -20,7 +20,7 @@ import datetime
 
 import segmentation_models as sm
 
-code_dir = "/scratches/markryku/engineering_project"
+code_dir = "/scratch/markryku/engineering_project"
 data_dir = "/data/markryku/"
 
 class DatasetProcessor:
