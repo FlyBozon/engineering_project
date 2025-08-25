@@ -15,10 +15,13 @@ from tensorflow import keras
 
 from processor import *
 
-datasets_info = "datasets_info.json"
+code_dir = "/scratches/markryku/engineering_project"
+data_dir = "/data/markryku/"
+
+datasets_info = f'{code_dir}/dataset_info.json' #"datasets_info.json"
 current_dataset ="landcover.ai" #"deepglobe" 
 
-processor = DatasetProcessor(current_dataset)
+processor = DatasetProcessor(current_dataset, dataset_info_path=datasets_info)
 #processor.color_mask_processing()
 #processor.plot_img_n_mask("datasets/deepglobe", 20)
 

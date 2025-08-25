@@ -8,7 +8,7 @@ import tensorflow as tf
 from tensorflow import keras
 from clearml import Task
 
-from kaggle_landcoverai_processor import *
+from processor import *
 
 
 # import segm models like that on kaggle, other way wouldnt work

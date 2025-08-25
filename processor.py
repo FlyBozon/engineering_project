@@ -20,10 +20,13 @@ import datetime
 
 import segmentation_models as sm
 
+code_dir = "/scratches/markryku/engineering_project"
+data_dir = "/data/markryku/"
+
 class DatasetProcessor:
     def __init__(self, dataset_name, dataset_info_path="datasets_info.json", input_dir="datasets"):
         self.dataset_name = dataset_name
-        self.input_dir = INPUT_dataset_DIR #input_dir
+        self.input_dir = f'{data_dir}{input_dir}' #input_dir
         
         self._load_dataset_info(dataset_info_path)
         self._setup_paths()
@@ -300,7 +303,7 @@ class DatasetProcessor:
             plt.tight_layout()
             plt.show()
 
-    def choose_useful(self, usefulness_percent=0.05): #at least 5% useful area (?)
+    def choose_useful(self, usefulness_percent=0.05): #at least 5% useful area 
         useless = 0
         useful = 0
 
@@ -310,7 +313,7 @@ class DatasetProcessor:
         for img in range(len(img_list)):   
             img_name = img_list[img]
             mask_name = msk_list[img]
-            #print("Now preparing image and masks number: ", img)
+            print("Now preparing image and masks number: ", img)
             
             temp_image = cv2.imread(self.patches_images_dir+'/'+img_list[img], 1)
             temp_mask = cv2.imread(self.patches_masks_dir+'/'+msk_list[img], 0)
@@ -321,16 +324,16 @@ class DatasetProcessor:
             else: 
                 ignore = 0
             if (1 - (counts[ignore]/counts.sum())) > usefulness_percent: 
-                #print("Save Me")
+                print("Save Me")
                 useful += 1        
                 if os.path.exists(self.useful_images_dir+'/'+img_name):
-                    #print(f"Tile already exists, skipping")  
+                    print(f"Tile already exists, skipping")  
                     continue
                 cv2.imwrite(self.useful_images_dir+'/'+img_name, temp_image)
                 cv2.imwrite(self.useful_masks_dir+'/'+mask_name, temp_mask)
                 
             else:
-                #print("I am useless")   
+                print("I am useless")   
                 useless += 1
         
         print(f'Useful = {useful}, useless = {useless}')
@@ -451,7 +454,7 @@ class DatasetProcessor:
         num_train_imgs = len(os.listdir(f"{self.train_images_dir}/train"))
         num_val_images = len(os.listdir(f"{self.val_images_dir}/val"))
 
-        #print(f'num_training_imgs = {num_train_imgs}, num_val_images = {num_val_images}')
+        print(f'num_training_imgs = {num_train_imgs}, num_val_images = {num_val_images}')
         
         if num_train_imgs == 0 or num_val_images == 0:
             print("ERROR: No training or validation images found!")
@@ -595,7 +598,7 @@ class DatasetProcessor:
         self.model.compile(
             optimizer='adam',
             loss=weighted_categorical_crossentropy(self.class_weight_dict),
-            metrics=['accuracy', sm.metrics.iou_score]  # Use standard sm.metrics
+            metrics=['accuracy', sm.metrics.iou_score] 
         )
         print("Model re-compiled with class weights!")
         
@@ -624,24 +627,6 @@ class DatasetProcessor:
         )
         callbacks.append(early_stop_cb)
 
-        # checkpoint_cb = ModelCheckpoint(
-        #     checkpoint_path,
-        #     monitor='val_custom_iou_metric', 
-        #     save_best_only=True,
-        #     mode='max',
-        #     verbose=1
-        # )
-        # callbacks.append(checkpoint_cb)
-        
-        # early_stop_cb = EarlyStopping(
-        #     monitor='val_custom_iou_metric',
-        #     patience=10,
-        #     mode='max',
-        #     verbose=1,
-        #     restore_best_weights=True
-        # )
-        # callbacks.append(early_stop_cb)
-        
         lr_reduce_cb = ReduceLROnPlateau(
             monitor='val_loss',
             factor=0.5,
