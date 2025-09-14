@@ -132,8 +132,8 @@ class DatasetProcessor:
         
         
         dirs = [
-            # self.patches_images_dir,
-            # self.patches_masks_dir,
+            self.patches_images_dir,
+            self.patches_masks_dir,
             # self.useful_images_dir,
             # self.useful_masks_dir,
             self.train_images_dir,
@@ -160,14 +160,8 @@ class DatasetProcessor:
         random_mask = random.choice(self.mask_files)
         
         temp_img = cv2.imread(random_img)
-        
-        if hasattr(self, 'class_colors'):  #UAVid + other with colorful masks
-            temp_mask = cv2.imread(random_mask, cv2.IMREAD_COLOR)
-            temp_mask = self.convert_color_mask_to_labels(temp_mask)
-        else:  #other
-            temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
 
-        #temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
+        temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
         labels, count = np.unique(temp_mask, return_counts=True)
         print("Labels are: ", labels, " and the counts are: ", count)
         
@@ -268,7 +262,11 @@ class DatasetProcessor:
                     elem = elem[:SIZE_Y, :SIZE_X]
                     patches = self.patchify(elem, (patch_size, patch_size, 3), patch_size)
             else:
-                elem = cv2.imread(f"{input_path}/{elem_name}", 0)
+                if hasattr(self, 'class_colors'):  #uavid and other colorful masks
+                    elem = cv2.imread(f"{input_path}/{elem_name}", cv2.IMREAD_COLOR)
+                    elem = self.convert_color_mask_to_labels(elem)  
+                else:  #other
+                    elem = cv2.imread(f"{input_path}/{elem_name}", 0)
                 if elem is None:
                     print(f"Could not read mask: {elem_name}")
                     continue
@@ -861,11 +859,25 @@ class DatasetProcessor:
             self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
             print(f"Set backbone to: {self.BACKBONE}")
 
-    def apply_class_weights(self):
+    #for landcoverai
+    # def apply_class_weights(self):
+    #     class_weights = self.calculate_class_weights()
+    #     if class_weights is not None:
+    #         self.class_weight_dict = {i: class_weights.get(i, 1.0) for i in range(self.n_classes)}
+    #         print(f"applied class weights: {self.class_weight_dict}")
+    #         return self.class_weight_dict
+    #     return None
+    
+    def apply_class_weights(self, ignore_classes=[5, 6, 7]):
         class_weights = self.calculate_class_weights()
         if class_weights is not None:
+            #if none is given, then ignore 0 by default
+            for ignore_class in ignore_classes:
+                if ignore_class in class_weights:
+                    class_weights[ignore_class] = 0.0
+            
             self.class_weight_dict = {i: class_weights.get(i, 1.0) for i in range(self.n_classes)}
-            print(f"applied class weights: {self.class_weight_dict}")
+            print(f"Applied class weights with ignored classes: {self.class_weight_dict}")
             return self.class_weight_dict
         return None
     
@@ -1025,3 +1037,7 @@ class DatasetProcessor:
         
         return label_mask
 
+    def uavid_data_preprocess(self):
+        #already divided into train/val/test
+        #convert color masks to label masks
+        #mvoe to correct folders (expected by datagen)
