@@ -15,10 +15,12 @@ from tensorflow import keras
 
 from processor import *
 
-code_dir = "/scratch/markryku/engineering_project"
-data_dir = "/data/markryku/"
+# code_dir = "/scratch/markryku/engineering_project"
+# data_dir = "/data/markryku/"
 
-datasets_info = f'{code_dir}/datasets_info.json' #"datasets_info.json"
+
+
+datasets_info = "datasets_info.json" #f'{code_dir}/datasets_info.json' #"datasets_info.json"
 current_dataset ="landcover.ai" #"deepglobe" 
 
 processor = DatasetProcessor(current_dataset, dataset_info_path=datasets_info)
@@ -29,14 +31,7 @@ processor.into_tiles(256)
 processor.choose_useful(0.05)
 processor.divide_train_val_test()
 
-processor.setup_model('resnet34')
-# dataset.train("unet", "resnet34")
-# dataset.train("unet", "resnet50") 
-# dataset.train("unet", "efficientnetb0")
-
-# dataset.train("deeplabv3", "resnet34")
-# dataset.train("fpn", "efficientnetb0")
-# dataset.train("linknet", "resnet50")
+processor.setup_model("unet", 'resnet18')
 
 processor.train()  
 

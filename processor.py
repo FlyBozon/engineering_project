@@ -1,6 +1,3 @@
-# code that was tested on kaggle with landcover.ai dataset
-# for deepglobe dataset would modify that code much, so it would be another version of it
-
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
@@ -26,15 +23,22 @@ import os
 os.environ['SM_FRAMEWORK'] = 'tf.keras'
 import segmentation_models as sm
 
+# code_dir = "/scratch/markryku/engineering_project"
+# data_dir = "/data/markryku/"
+# output_dir = "/data/markryku/output/"
 
-code_dir = "/scratch/markryku/engineering_project"
-data_dir = "/data/markryku/"
-output_dir = "/data/markryku/output/"
+def save_img(img, name, format, folder):
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    is_ok = cv2.imwrite(f"{folder}/{name}.{format}", img)
+    if not is_ok:
+        print(f"Failed to save image: {folder}/{name}.{format}")
+
 
 class DatasetProcessor:
     def __init__(self, dataset_name, dataset_info_path="datasets_info.json", input_dir="datasets"):
         self.dataset_name = dataset_name
-        self.input_dir = f'{data_dir}{input_dir}' #input_dir
+        self.input_dir = input_dir #f'{data_dir}{input_dir}' #input_dir
         
         self._load_dataset_info(dataset_info_path)
         self._setup_paths()
@@ -60,9 +64,25 @@ class DatasetProcessor:
         self.tensorboard_dir = f'{self.output_dir}/tensorboard'
         self.class_weight_dict = None
         
+    # def _load_dataset_info(self, dataset_info_path):
+    #     with open(dataset_info_path, 'r') as f:
+    #         config = json.load(f)
+        
+    #     dataset = config['datasets'][self.dataset_name]
+    #     self.n_classes = dataset['classes']['num_classes']
+    #     self.dataset_dir = dataset['paths']['dataset_dir']
+    #     self.img_format = dataset['data_format']['image_format']
+    #     self.mask_format = dataset['data_format']['mask_format']
+    #     self.training_params = config['training_params']['default']
+    #     self.ignore_class = dataset['classes']['ignore_class'] 
+        
+    #     print(f"Loaded {dataset['name']}: {self.n_classes} classes")
+        
     def _load_dataset_info(self, dataset_info_path):
         with open(dataset_info_path, 'r') as f:
             config = json.load(f)
+        
+        self._dataset_config = config
         
         dataset = config['datasets'][self.dataset_name]
         self.n_classes = dataset['classes']['num_classes']
@@ -70,14 +90,26 @@ class DatasetProcessor:
         self.img_format = dataset['data_format']['image_format']
         self.mask_format = dataset['data_format']['mask_format']
         self.training_params = config['training_params']['default']
-        self.ignore_class = dataset['classes']['ignore_class'] 
+        self.ignore_class = dataset['classes']['ignore_class']
+        
+        if 'preprocessing' in dataset:
+            preprocessing = dataset['preprocessing']
+            if 'patch_size' in preprocessing:
+                self.patch = preprocessing['patch_size']
+                print(f"Using patch size from config: {self.patch}")
+            if 'overlap' in preprocessing:
+                self.overlap = preprocessing['overlap']
+                print(f"Using overlap from config: {self.overlap}")
         
         print(f"Loaded {dataset['name']}: {self.n_classes} classes")
         
+        if self.dataset_name == 'uavid':
+            self.setup_uavid_color_mapping()
+
     def _setup_paths(self):
         self.images_path = f"{self.input_dir}/{self.dataset_dir}/images"
         self.masks_path = f"{self.input_dir}/{self.dataset_dir}/masks"
-        self.output_dir = f"{output_dir}output_{self.dataset_dir}"
+        self.output_dir = f"output_{self.dataset_dir}" #f"{output_dir}output_{self.dataset_dir}"
         
         self.image_files = glob.glob(f"{self.images_path}/*.{self.img_format}")
         self.mask_files = glob.glob(f"{self.masks_path}/*.{self.mask_format}")
@@ -86,8 +118,9 @@ class DatasetProcessor:
     def _create_output_dirs(self):
         self.patches_images_dir = f'{self.output_dir}/{self.patch}_patches/images'
         self.patches_masks_dir = f'{self.output_dir}/{self.patch}_patches/masks'
-        self.useful_images_dir = f'{self.output_dir}/useful_patches/images'
-        self.useful_masks_dir = f'{self.output_dir}/useful_patches/masks'
+        # for uavid should rather skip useful patches and just divide all patches into train/val/test, as its drone imagery, so have a lot of details on image
+        # self.useful_images_dir = f'{self.output_dir}/useful_patches/images'
+        # self.useful_masks_dir = f'{self.output_dir}/useful_patches/masks'
         self.train_images_dir = f'{self.output_dir}/data_for_training/train_images'
         self.train_masks_dir = f'{self.output_dir}/data_for_training/train_masks'
         self.val_images_dir = f'{self.output_dir}/data_for_training/val_images'
@@ -99,10 +132,10 @@ class DatasetProcessor:
         
         
         dirs = [
-            self.patches_images_dir,
-            self.patches_masks_dir,
-            self.useful_images_dir,
-            self.useful_masks_dir,
+            # self.patches_images_dir,
+            # self.patches_masks_dir,
+            # self.useful_images_dir,
+            # self.useful_masks_dir,
             self.train_images_dir,
             self.train_masks_dir,
             self.val_images_dir,
@@ -128,7 +161,13 @@ class DatasetProcessor:
         
         temp_img = cv2.imread(random_img)
         
-        temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
+        if hasattr(self, 'class_colors'):  #UAVid + other with colorful masks
+            temp_mask = cv2.imread(random_mask, cv2.IMREAD_COLOR)
+            temp_mask = self.convert_color_mask_to_labels(temp_mask)
+        else:  #other
+            temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
+
+        #temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
         labels, count = np.unique(temp_mask, return_counts=True)
         print("Labels are: ", labels, " and the counts are: ", count)
         
@@ -137,7 +176,7 @@ class DatasetProcessor:
             
         return labels, count
     
-    def into_tiles(self, patch_size, overlap_size=64):
+    def into_tiles(self, patch_size, overlap_size=64, is_drone=False):
         print(f"Creating {patch_size}x{patch_size} patches with {overlap_size} overlap...")
         
         step = patch_size - overlap_size if overlap_size > 0 else patch_size
@@ -347,7 +386,10 @@ class DatasetProcessor:
         print(f'Useful = {useful}, useless = {useless}')
 
     def divide_train_val_test(self, train_ratio=0.7, val_ratio=0.2, test_ratio=0.1):
-        patch_files = [f for f in os.listdir(self.patches_images_dir) if f.endswith('.png')]
+        image_files = set(f for f in os.listdir(self.useful_images_dir) if f.endswith('.png'))
+        mask_files = set(f for f in os.listdir(self.useful_masks_dir) if f.endswith('.png'))
+        
+        patch_files = list(image_files.intersection(mask_files))
         
         if len(patch_files) == 0:
             print("No patches found!")
@@ -364,19 +406,22 @@ class DatasetProcessor:
         test_files = patch_files[val_end:]
         
         for filename in train_files:
-            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.train_images_dir}/train/'")
-            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.train_masks_dir}/train/'")
+            os.system(f"cp '{self.useful_images_dir}/{filename}' '{self.train_images_dir}/train/'")
+            os.system(f"cp '{self.useful_masks_dir}/{filename}' '{self.train_masks_dir}/train/'")
         
         for filename in val_files:
-            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.val_images_dir}/val/'")
-            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.val_masks_dir}/val/'")
+            os.system(f"cp '{self.useful_images_dir}/{filename}' '{self.val_images_dir}/val/'")
+            os.system(f"cp '{self.useful_masks_dir}/{filename}' '{self.val_masks_dir}/val/'")
         
         for filename in test_files:
-            os.system(f"cp '{self.patches_images_dir}/{filename}' '{self.test_images_dir}/test/'")
-            os.system(f"cp '{self.patches_masks_dir}/{filename}' '{self.test_masks_dir}/test/'")
+            os.system(f"cp '{self.useful_images_dir}/{filename}' '{self.test_images_dir}/test/'")
+            os.system(f"cp '{self.useful_masks_dir}/{filename}' '{self.test_masks_dir}/test/'")
         
         print(f"Train: {len(train_files)}, Val: {len(val_files)}, Test: {len(test_files)}")
 
+        if len(image_files) != len(mask_files):
+            print(f"Warning: {len(image_files)} images but {len(mask_files)} masks in useful directories")
+            
     def calculate_class_weights(self, masks_dir=None):
         if masks_dir is None:
             masks_dir = self.train_masks_dir+"/train"
@@ -446,19 +491,14 @@ class DatasetProcessor:
         mask = to_categorical(mask, self.n_classes).astype(np.float32)
         
         return (img, mask)
-            
 
-    def setup_model(self, backbone='resnet34'):
-        #model setup inspiration from https://youtu.be/0W6MKZqSke8
-        print(f"Setting up model with {backbone} backbone...")
+    def setup_model(self, architecture="unet", backbone='resnet34'):
+        print(f"Setting up {architecture.upper()} model with {backbone} backbone...")
         
+        self.architecture = architecture
         self.BACKBONE = backbone
         self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
         
-        #calc train params
-        # num_train_imgs = len(os.listdir(self.train_images_dir))
-        # num_val_images = len(os.listdir(self.val_images_dir))
-
         num_train_imgs = len(os.listdir(f"{self.train_images_dir}/train"))
         num_val_images = len(os.listdir(f"{self.val_images_dir}/val"))
 
@@ -470,54 +510,47 @@ class DatasetProcessor:
         
         self.steps_per_epoch = num_train_imgs // self.batch_size
         self.val_steps_per_epoch = num_val_images // self.batch_size
-
-        #print(f'num_step_per_epoch = {self.steps_per_epoch}, num_val_step_per_epoch = {self.val_steps_per_epoch}')
         
         IMG_HEIGHT = self.patch
         IMG_WIDTH = self.patch
         IMG_CHANNELS = 3
 
-        self.model = sm.Unet(
-            self.BACKBONE, 
-            encoder_weights='imagenet', 
-            input_shape=(IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
-            classes=self.n_classes, 
-            activation='softmax'
-        )
+        # Select architecture
+        model_args = {
+            'backbone_name': self.BACKBONE,
+            'encoder_weights': 'imagenet',
+            'input_shape': (IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
+            'classes': self.n_classes,
+            'activation': 'softmax'
+        }
         
-        # self.model.compile(
-        #     'Adam', 
-        #     loss=sm.losses.categorical_focal_jaccard_loss, 
-        #     metrics=[sm.metrics.iou_score]
-        # )
-
-
+        if architecture.lower() == 'unet':
+            self.model = sm.Unet(**model_args)
+        elif architecture.lower() == 'linknet':
+            self.model = sm.Linknet(**model_args)
+        elif architecture.lower() == 'fpn':
+            self.model = sm.FPN(**model_args)
+        elif architecture.lower() == 'pspnet':
+            self.model = sm.PSPNet(**model_args)
+        elif architecture.lower() == 'deeplabv3':
+            self.model = sm.DeepLabV3(**model_args)
+        elif architecture.lower() == 'deeplabv3plus':
+            self.model = sm.DeepLabV3Plus(**model_args)
+        else:
+            print(f"ERROR: Unknown architecture '{architecture}'. Using U-Net as default.")
+            self.model = sm.Unet(**model_args)
+        
+        # Compile model
         self.model.compile(
             optimizer='adam',
             loss='categorical_crossentropy', 
             metrics=['accuracy', sm.metrics.iou_score]
         )
 
-        # self.model.compile(
-        #     optimizer='Adam', 
-        #     loss='categorical_crossentropy', 
-        #     metrics=[sm.metrics.iou_score]
-        # )
-
-        # self.model.compile(
-        #     optimizer='adam',
-        #     loss='categorical_crossentropy',
-        #     metrics=['accuracy', custom_iou_metric]
-        # )
-
-        # self.model.compile(
-        #     optimizer='adam',
-        #     loss='categorical_crossentropy', 
-        #     metrics=['accuracy']
-        # )
-
         print("Model compiled successfully!")
+        print(f"Architecture: {architecture.upper()}")
         print(f"Model input shape: {self.model.input_shape}")
+        print(f"Model parameters: {self.model.count_params():,}")
         print(f"Steps per epoch: {self.steps_per_epoch}")
         print(f"Validation steps: {self.val_steps_per_epoch}")
 
@@ -703,7 +736,9 @@ class DatasetProcessor:
             #class_weight=self.class_weight_dict  
         )
         
-        model_filename = f'{self.dataset_name}_{self.n_epochs}_epochs_{self.BACKBONE}_backbone_batch{self.batch_size}_v{self.current_version}.keras'
+        #model_filename = f'{self.dataset_name}_{self.n_epochs}_epochs_{self.BACKBONE}_backbone_batch{self.batch_size}_v{self.current_version}.keras'
+        actual_epochs = len(self.history.history['loss']) if self.history else self.n_epochs
+        model_filename = f'{self.dataset_name}_{actual_epochs}_epochs_{self.BACKBONE}_backbone_batch{self.batch_size}_v{self.current_version}.keras'
         self.model.save(model_filename)
         print(f"Final model saved as: {model_filename}")
         print(f"Best model saved as: {checkpoint_path}")
@@ -923,28 +958,70 @@ class DatasetProcessor:
                         iteration=0
                     )
 
+    def setup_uavid_color_mapping(self):
+        """Setup UAVid color mapping from JSON configuration"""
+        if not hasattr(self, 'dataset_name') or self.dataset_name != 'uavid':
+            print("Warning: This function is designed for UAVid dataset")
+            return
+        
+        # Get color mapping from loaded dataset info
+        if not hasattr(self, '_dataset_config'):
+            print("Error: Dataset configuration not loaded. Call _load_dataset_info() first")
+            return
+        
+        dataset_config = self._dataset_config['datasets'][self.dataset_name]
+        class_colors_dict = dataset_config['classes']['class_colors']
+        class_names = dataset_config['classes']['class_names']
+        class_ids = dataset_config['classes']['class_ids']
+        
+        # Create mapping from class_id to color
+        self.class_colors = {}
+        for i, (class_name, class_id) in enumerate(zip(class_names, class_ids)):
+            self.class_colors[class_id] = class_colors_dict[class_name]
+        
+        # Create reverse mapping for faster lookup
+        self.color_to_class = {}
+        for class_id, color in self.class_colors.items():
+            color_key = tuple(color)
+            self.color_to_class[color_key] = class_id
+        
+        print(f"UAVid color mapping loaded: {len(self.class_colors)} classes")
+        print("Class mapping:")
+        for class_id, color in self.class_colors.items():
+            class_name = class_names[class_id]
+            print(f"  {class_id}: {class_name} -> {color}")
 
-def custom_iou_metric(y_true, y_pred):
-    y_pred = tf.argmax(y_pred, axis=-1)
-    y_true = tf.argmax(y_true, axis=-1)
-    
-    intersection = tf.reduce_sum(tf.cast(y_true * y_pred, tf.float32))
-    union = tf.reduce_sum(tf.cast(y_true + y_pred, tf.float32)) - intersection
-    
-    return intersection / (union + tf.keras.backend.epsilon())
 
-def weighted_categorical_crossentropy(class_weights):
-    def loss_function(y_true, y_pred):
-        weights_tensor = tf.constant([class_weights[i] for i in range(len(class_weights))], dtype=tf.float32)
+    def convert_color_mask_to_labels(self, color_mask):
+        if not hasattr(self, 'class_colors'):
+            self.setup_uavid_color_mapping()
         
-        y_true_indices = tf.argmax(y_true, axis=-1)
+        label_mask = np.zeros(color_mask.shape[:2], dtype=np.uint8)
         
-        pixel_weights = tf.gather(weights_tensor, y_true_indices)
+        if len(color_mask.shape) == 3:
+            color_mask_rgb = cv2.cvtColor(color_mask, cv2.COLOR_BGR2RGB)
+        else:
+            color_mask_rgb = color_mask
         
-        cce = tf.keras.losses.categorical_crossentropy(y_true, y_pred)
+        for class_id, color in self.class_colors.items():
+            matches = np.all(color_mask_rgb == color, axis=-1)
+            label_mask[matches] = class_id
         
-        weighted_cce = cce * pixel_weights
+        total_pixels = label_mask.size
+        matched_pixels = np.sum(label_mask >= 0)  #all pixels should be matched
         
-        return tf.reduce_mean(weighted_cce)
-    
-    return loss_function
+        if matched_pixels < total_pixels:
+            #unique colors that weren't matched
+            unique_colors = np.unique(color_mask_rgb.reshape(-1, 3), axis=0)
+            known_colors = set(tuple(color) for color in self.class_colors.values())
+            unknown_colors = [tuple(color) for color in unique_colors if tuple(color) not in known_colors]
+            
+            if unknown_colors:
+                print(f"Warning: Found {len(unknown_colors)} unknown colors, assigning to ignore class ({self.ignore_class})")
+                #unknown colors to ignore class
+                for unknown_color in unknown_colors:
+                    matches = np.all(color_mask_rgb == unknown_color, axis=-1)
+                    label_mask[matches] = self.ignore_class
+        
+        return label_mask
+

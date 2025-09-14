@@ -8,6 +8,10 @@ logs/
 output_deepglobe/
 best_model/
 kaggle_version/deepglobe/
+from_ssh_machine/
+create-ref-map/
+references/
+old/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
