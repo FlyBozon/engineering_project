@@ -18,20 +18,22 @@ from processor import *
 # code_dir = "/scratch/markryku/engineering_project"
 # data_dir = "/data/markryku/"
 
-
-
 datasets_info = "datasets_info.json" #f'{code_dir}/datasets_info.json' #"datasets_info.json"
-current_dataset ="landcover.ai" #"deepglobe" 
+current_dataset = "uavid" #"landcover.ai" #"deepglobe" 
 
 processor = DatasetProcessor(current_dataset, dataset_info_path=datasets_info)
 #processor.color_mask_processing()
 #processor.plot_img_n_mask("datasets/deepglobe", 20)
 
-processor.into_tiles(256)
-processor.choose_useful(0.05)
-processor.divide_train_val_test()
+# processor.into_tiles(256)
+# processor.choose_useful(0.05)
+# processor.divide_train_val_test()
 
-processor.setup_model("unet", 'resnet18')
+#uavid
+processor.uavid_data_preprocess()
+processor.setup_model("fpn", 'efficientnetb3') 
+
+processor.set_training_parameters(epochs=30, batch_size=6) 
 
 processor.train()  
 

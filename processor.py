@@ -160,8 +160,12 @@ class DatasetProcessor:
         random_mask = random.choice(self.mask_files)
         
         temp_img = cv2.imread(random_img)
+        if hasattr(self, 'class_colors'):  #uavid and other colorful masks
+            temp_mask = cv2.imread(random_mask, cv2.IMREAD_COLOR)
+            temp_mask = self.convert_color_mask_to_labels(temp_mask)
+        else:  #other
+            temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
 
-        temp_mask = cv2.imread(random_mask, cv2.IMREAD_GRAYSCALE)
         labels, count = np.unique(temp_mask, return_counts=True)
         print("Labels are: ", labels, " and the counts are: ", count)
         
@@ -867,8 +871,11 @@ class DatasetProcessor:
     #         print(f"applied class weights: {self.class_weight_dict}")
     #         return self.class_weight_dict
     #     return None
-    
-    def apply_class_weights(self, ignore_classes=[5, 6, 7]):
+    def apply_class_weights(self, ignore_classes=None):
+        if ignore_classes is None and hasattr(self, '_dataset_config'):
+            dataset_config = self._dataset_config['datasets'][self.dataset_name]
+            ignore_classes = dataset_config['classes'].get('ignored_classes', [])
+
         class_weights = self.calculate_class_weights()
         if class_weights is not None:
             #if none is given, then ignore 0 by default
@@ -1037,7 +1044,127 @@ class DatasetProcessor:
         
         return label_mask
 
-    def uavid_data_preprocess(self):
+
         #already divided into train/val/test
         #convert color masks to label masks
-        #mvoe to correct folders (expected by datagen)
+        #move to correct folders (expected by datagen)
+    def uavid_data_preprocess(self):
+        print("Uavid data preprocessing...")
+        #uavid dataset structure: uavid_train, uavid_val, uavid_test
+        #train and val contains seqXX/Images/ and seqXX/Labels/, test has only images
+        split_mapping = {
+            'uavid_train': 'train', 
+            'uavid_val': 'val'
+        }
+
+        for uavid_split, standard_split in split_mapping.items():
+            print(f"\nProcessing {uavid_split} -> {standard_split} split...")
+            
+            split_images_path = f"{self.input_dir}/{self.dataset_dir}/{uavid_split}"
+            
+            split_output_images = f"{self.output_dir}/data_for_training/{standard_split}_images/{standard_split}"
+            split_output_masks = f"{self.output_dir}/data_for_training/{standard_split}_masks/{standard_split}"
+            
+            os.makedirs(split_output_images, exist_ok=True)
+            os.makedirs(split_output_masks, exist_ok=True)
+            
+            if not os.path.exists(split_images_path):
+                print(f"  Warning: {split_images_path} does not exist, skipping...")
+                continue
+            
+            # UAVid structure: split/seqXX/Images/ and split/seqXX/Labels/
+            try:
+                seq_dirs = [d for d in os.listdir(split_images_path) if d.startswith('seq')]
+            except OSError as e:
+                print(f"  Error reading {split_images_path}: {e}")
+                continue
+                
+            if not seq_dirs:
+                print(f"  No sequence directories found in {split_images_path}")
+                continue
+            
+            for seq_dir in seq_dirs:
+                print(f"  Processing {seq_dir}...")
+                
+                images_dir = f"{split_images_path}/{seq_dir}/Images"
+                if os.path.exists(images_dir):
+                    image_files = glob.glob(f"{images_dir}/*.{self.img_format}")
+                    for img_file in image_files:
+                        try:
+                            img_name = os.path.basename(img_file)
+                            new_name = f"{seq_dir}_{img_name}"
+                            
+                            img = cv2.imread(img_file)
+                            if img is not None:
+                                success = cv2.imwrite(f"{split_output_images}/{new_name}", img)
+                                if not success:
+                                    print(f"    Failed to save image: {new_name}")
+                            else:
+                                print(f"    Could not read image: {img_file}")
+                        except Exception as e:
+                            print(f"    Error processing image {img_file}: {e}")
+                else:
+                    print(f"    Images directory not found: {images_dir}")
+                
+                labels_dir = f"{split_images_path}/{seq_dir}/Labels"
+                if os.path.exists(labels_dir):
+                    mask_files = glob.glob(f"{labels_dir}/*.{self.mask_format}")
+                    for mask_file in mask_files:
+                        try:
+                            mask_name = os.path.basename(mask_file)
+                            new_name = f"{seq_dir}_{mask_name}"
+                            
+                            color_mask = cv2.imread(mask_file, cv2.IMREAD_COLOR)
+                            if color_mask is not None:
+                                label_mask = self.convert_color_mask_to_labels(color_mask)
+                                success = cv2.imwrite(f"{split_output_masks}/{new_name}", label_mask)
+                                if not success:
+                                    print(f"    Failed to save mask: {new_name}")
+                            else:
+                                print(f"    Could not read mask: {mask_file}")
+                        except Exception as e:
+                            print(f"    Error processing mask {mask_file}: {e}")
+                else:
+                    print(f"    Labels directory not found: {labels_dir}")
+            
+            print(f"  Completed {uavid_split} -> {standard_split} split")
+        
+        train_imgs = len(os.listdir(f"{self.output_dir}/data_for_training/train_images/train")) if os.path.exists(f"{self.output_dir}/data_for_training/train_images/train") else 0
+        train_masks = len(os.listdir(f"{self.output_dir}/data_for_training/train_masks/train")) if os.path.exists(f"{self.output_dir}/data_for_training/train_masks/train") else 0
+        val_imgs = len(os.listdir(f"{self.output_dir}/data_for_training/val_images/val")) if os.path.exists(f"{self.output_dir}/data_for_training/val_images/val") else 0
+        val_masks = len(os.listdir(f"{self.output_dir}/data_for_training/val_masks/val")) if os.path.exists(f"{self.output_dir}/data_for_training/val_masks/val") else 0
+        
+        print(f"\nProcessing summary:")
+        print(f"  Train: {train_imgs} images, {train_masks} masks")
+        print(f"  Val: {val_imgs} images, {val_masks} masks")
+        
+        if train_imgs == 0 or train_masks == 0:
+            print("  Warning: No training data found!")
+        if val_imgs == 0 or val_masks == 0:
+            print("  Warning: No validation data found!")
+        
+        print("UAVid data preprocessing completed!")
+        print("Data is now ready for training with create_train_generator()")
+
+def custom_iou_metric(y_true, y_pred):
+    y_pred = tf.argmax(y_pred, axis=-1)
+    y_true = tf.argmax(y_true, axis=-1)
+
+    intersection = tf.reduce_sum(tf.cast(y_true * y_pred, tf.float32))
+    union = tf.reduce_sum(tf.cast(y_true + y_pred, tf.float32)) - intersection
+
+    return intersection / (union + tf.keras.backend.epsilon())
+
+def weighted_categorical_crossentropy(class_weights):
+    def loss_function(y_true, y_pred):
+        weights_tensor = tf.constant([class_weights[i] for i in range(len(class_weights))], dtype=tf.float32)
+
+        y_true_indices = tf.argmax(y_true, axis=-1)
+
+        pixel_weights = tf.gather(weights_tensor, y_true_indices)
+
+        cce = tf.keras.losses.categorical_crossentropy(y_true, y_pred)
+
+        weighted_cce = cce * pixel_weights
+
+        return tf.reduce_mean(weighted_cce)
