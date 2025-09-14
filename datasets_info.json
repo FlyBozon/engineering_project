@@ -122,12 +122,12 @@
           "static_car": [192, 0, 192],
           "human": [64, 64, 0]
         },
-        "ignore_class": 0
+        "ignore_class": [5,6,7]
       },
       "data_format": {
         "image_format": "png",
         "mask_format": "png",
-        "mask_type": "grayscale_indexed",
+        "mask_type": "rgb_color_coded",
         "image_channels": 3,
         "bit_depth": 8
       },

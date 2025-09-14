@@ -33,7 +33,7 @@ processor = DatasetProcessor(current_dataset, dataset_info_path=datasets_info)
 processor.uavid_data_preprocess()
 processor.setup_model("fpn", 'efficientnetb3') 
 
-processor.set_training_parameters(epochs=30, batch_size=6) 
+processor.set_training_parameters(epochs=100, batch_size=32) 
 
 processor.train()  
 

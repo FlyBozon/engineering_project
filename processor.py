@@ -23,9 +23,11 @@ import os
 os.environ['SM_FRAMEWORK'] = 'tf.keras'
 import segmentation_models as sm
 
-# code_dir = "/scratch/markryku/engineering_project"
-# data_dir = "/data/markryku/"
-# output_dir = "/data/markryku/output/"
+code_dir = "/scratch/markryku/engineering_project"
+data_dir = "/data/markryku/"
+output_dir = "/data/markryku/output/"
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1' 
 
 def save_img(img, name, format, folder):
     if not os.path.exists(folder):
@@ -38,11 +40,11 @@ def save_img(img, name, format, folder):
 class DatasetProcessor:
     def __init__(self, dataset_name, dataset_info_path="datasets_info.json", input_dir="datasets"):
         self.dataset_name = dataset_name
-        self.input_dir = input_dir #f'{data_dir}{input_dir}' #input_dir
+        self.input_dir = f'{data_dir}{input_dir}' #input_dir
         
         self._load_dataset_info(dataset_info_path)
         self._setup_paths()
-        self.patch = 256
+        self.patch = 512 #256
         self._create_output_dirs()
         
         self.seed = 24
@@ -63,6 +65,13 @@ class DatasetProcessor:
 
         self.tensorboard_dir = f'{self.output_dir}/tensorboard'
         self.class_weight_dict = None
+
+        if len(tf.config.list_physical_devices('GPU')) > 1:
+            self.strategy = tf.distribute.MirroredStrategy()
+            print(f"Using MirroredStrategy with {self.strategy.num_replicas_in_sync} GPUs")
+        else:
+            self.strategy = tf.distribute.get_strategy() 
+            print("Using default strategy (single device)")
         
     # def _load_dataset_info(self, dataset_info_path):
     #     with open(dataset_info_path, 'r') as f:
@@ -109,7 +118,7 @@ class DatasetProcessor:
     def _setup_paths(self):
         self.images_path = f"{self.input_dir}/{self.dataset_dir}/images"
         self.masks_path = f"{self.input_dir}/{self.dataset_dir}/masks"
-        self.output_dir = f"output_{self.dataset_dir}" #f"{output_dir}output_{self.dataset_dir}"
+        self.output_dir =f"{output_dir}output_{self.dataset_dir}" #f"output_{self.dataset_dir}" 
         
         self.image_files = glob.glob(f"{self.images_path}/*.{self.img_format}")
         self.mask_files = glob.glob(f"{self.masks_path}/*.{self.mask_format}")
@@ -494,67 +503,113 @@ class DatasetProcessor:
         
         return (img, mask)
 
-    def setup_model(self, architecture="unet", backbone='resnet34'):
-        print(f"Setting up {architecture.upper()} model with {backbone} backbone...")
+    # def setup_model(self, architecture="unet", backbone='resnet34'):
+    #     print(f"Setting up {architecture.upper()} model with {backbone} backbone...")
         
-        self.architecture = architecture
-        self.BACKBONE = backbone
-        self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
+    #     self.architecture = architecture
+    #     self.BACKBONE = backbone
+    #     self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
         
-        num_train_imgs = len(os.listdir(f"{self.train_images_dir}/train"))
-        num_val_images = len(os.listdir(f"{self.val_images_dir}/val"))
+    #     num_train_imgs = len(os.listdir(f"{self.train_images_dir}/train"))
+    #     num_val_images = len(os.listdir(f"{self.val_images_dir}/val"))
 
-        print(f'num_training_imgs = {num_train_imgs}, num_val_images = {num_val_images}')
+    #     print(f'num_training_imgs = {num_train_imgs}, num_val_images = {num_val_images}')
         
-        if num_train_imgs == 0 or num_val_images == 0:
-            print("ERROR: No training or validation images found!")
-            return
+    #     if num_train_imgs == 0 or num_val_images == 0:
+    #         print("ERROR: No training or validation images found!")
+    #         return
         
-        self.steps_per_epoch = num_train_imgs // self.batch_size
-        self.val_steps_per_epoch = num_val_images // self.batch_size
+    #     self.steps_per_epoch = num_train_imgs // self.batch_size
+    #     self.val_steps_per_epoch = num_val_images // self.batch_size
         
-        IMG_HEIGHT = self.patch
-        IMG_WIDTH = self.patch
-        IMG_CHANNELS = 3
+    #     IMG_HEIGHT = self.patch
+    #     IMG_WIDTH = self.patch
+    #     IMG_CHANNELS = 3
 
-        # Select architecture
-        model_args = {
-            'backbone_name': self.BACKBONE,
-            'encoder_weights': 'imagenet',
-            'input_shape': (IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
-            'classes': self.n_classes,
-            'activation': 'softmax'
-        }
+    #     # Select architecture
+    #     model_args = {
+    #         'backbone_name': self.BACKBONE,
+    #         'encoder_weights': 'imagenet',
+    #         'input_shape': (IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
+    #         'classes': self.n_classes,
+    #         'activation': 'softmax'
+    #     }
         
-        if architecture.lower() == 'unet':
-            self.model = sm.Unet(**model_args)
-        elif architecture.lower() == 'linknet':
-            self.model = sm.Linknet(**model_args)
-        elif architecture.lower() == 'fpn':
-            self.model = sm.FPN(**model_args)
-        elif architecture.lower() == 'pspnet':
-            self.model = sm.PSPNet(**model_args)
-        elif architecture.lower() == 'deeplabv3':
-            self.model = sm.DeepLabV3(**model_args)
-        elif architecture.lower() == 'deeplabv3plus':
-            self.model = sm.DeepLabV3Plus(**model_args)
-        else:
-            print(f"ERROR: Unknown architecture '{architecture}'. Using U-Net as default.")
-            self.model = sm.Unet(**model_args)
+    #     if architecture.lower() == 'unet':
+    #         self.model = sm.Unet(**model_args)
+    #     elif architecture.lower() == 'linknet':
+    #         self.model = sm.Linknet(**model_args)
+    #     elif architecture.lower() == 'fpn':
+    #         self.model = sm.FPN(**model_args)
+    #     elif architecture.lower() == 'pspnet':
+    #         self.model = sm.PSPNet(**model_args)
+    #     elif architecture.lower() == 'deeplabv3':
+    #         self.model = sm.DeepLabV3(**model_args)
+    #     elif architecture.lower() == 'deeplabv3plus':
+    #         self.model = sm.DeepLabV3Plus(**model_args)
+    #     else:
+    #         print(f"ERROR: Unknown architecture '{architecture}'. Using U-Net as default.")
+    #         self.model = sm.Unet(**model_args)
         
-        # Compile model
-        self.model.compile(
-            optimizer='adam',
-            loss='categorical_crossentropy', 
-            metrics=['accuracy', sm.metrics.iou_score]
-        )
+    #     # Compile model
+    #     self.model.compile(
+    #         optimizer='adam',
+    #         loss='categorical_crossentropy', 
+    #         metrics=['accuracy', sm.metrics.iou_score]
+    #     )
 
-        print("Model compiled successfully!")
-        print(f"Architecture: {architecture.upper()}")
-        print(f"Model input shape: {self.model.input_shape}")
-        print(f"Model parameters: {self.model.count_params():,}")
-        print(f"Steps per epoch: {self.steps_per_epoch}")
-        print(f"Validation steps: {self.val_steps_per_epoch}")
+    #     print("Model compiled successfully!")
+    #     print(f"Architecture: {architecture.upper()}")
+    #     print(f"Model input shape: {self.model.input_shape}")
+    #     print(f"Model parameters: {self.model.count_params():,}")
+    #     print(f"Steps per epoch: {self.steps_per_epoch}")
+    #     print(f"Validation steps: {self.val_steps_per_epoch}")
+
+    def setup_model(self, architecture="fpn", backbone='efficientnet-b3'):
+        with self.strategy.scope():
+            print(f"Setting up {architecture.upper()} model with {backbone} backbone...")
+            
+            self.architecture = architecture
+            self.BACKBONE = backbone
+            self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
+            
+            # Calculate steps (adjust for multi-GPU)
+            num_train_imgs = len(os.listdir(f"{self.train_images_dir}/train"))
+            num_val_images = len(os.listdir(f"{self.val_images_dir}/val"))
+            
+            # Adjust batch size for multiple GPUs
+            global_batch_size = self.batch_size * self.strategy.num_replicas_in_sync
+            self.steps_per_epoch = num_train_imgs // global_batch_size
+            self.val_steps_per_epoch = num_val_images // global_batch_size
+            
+            # Model creation code remains the same...
+            IMG_HEIGHT = self.patch
+            IMG_WIDTH = self.patch
+            IMG_CHANNELS = 3
+
+            model_args = {
+                'backbone_name': self.BACKBONE,
+                'encoder_weights': 'imagenet',
+                'input_shape': (IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
+                'classes': self.n_classes,
+                'activation': 'softmax'
+            }
+            
+            if architecture.lower() == 'fpn':
+                self.model = sm.FPN(**model_args)
+            # ... other architectures
+            
+            self.model.compile(
+                optimizer='adam',
+                loss='categorical_crossentropy', 
+                metrics=['accuracy', sm.metrics.iou_score]
+            )
+            if hasattr(self.strategy, 'num_replicas_in_sync'):
+                global_batch_size = self.batch_size * self.strategy.num_replicas_in_sync
+                print(f"Global batch size: {global_batch_size}")
+
+        print(f"Model will train on {self.strategy.num_replicas_in_sync} GPUs")
+        print(f"Global batch size: {global_batch_size}")
 
     def create_train_generator(self):
         print("Creating training data generators...")
@@ -679,7 +734,6 @@ class DatasetProcessor:
         
         callbacks = []
         
-
         clearml_cb = self.setup_clearml_callback()
         callbacks.append(clearml_cb)
 
@@ -863,6 +917,8 @@ class DatasetProcessor:
             self.preprocess_input = sm.get_preprocessing(self.BACKBONE)
             print(f"Set backbone to: {self.BACKBONE}")
 
+
+    
     #for landcoverai
     # def apply_class_weights(self):
     #     class_weights = self.calculate_class_weights()
@@ -885,6 +941,7 @@ class DatasetProcessor:
             
             self.class_weight_dict = {i: class_weights.get(i, 1.0) for i in range(self.n_classes)}
             print(f"Applied class weights with ignored classes: {self.class_weight_dict}")
+            print(self.class_weight_dict)
             return self.class_weight_dict
         return None
     
@@ -1049,7 +1106,7 @@ class DatasetProcessor:
         #convert color masks to label masks
         #move to correct folders (expected by datagen)
     def uavid_data_preprocess(self):
-        print("Uavid data preprocessing...")
+        print("UAVid data preprocessing...")
         #uavid dataset structure: uavid_train, uavid_val, uavid_test
         #train and val contains seqXX/Images/ and seqXX/Labels/, test has only images
         split_mapping = {
@@ -1072,7 +1129,7 @@ class DatasetProcessor:
                 print(f"  Warning: {split_images_path} does not exist, skipping...")
                 continue
             
-            # UAVid structure: split/seqXX/Images/ and split/seqXX/Labels/
+            #split/seqXX/Images/ and split/seqXX/Labels/
             try:
                 seq_dirs = [d for d in os.listdir(split_images_path) if d.startswith('seq')]
             except OSError as e:
@@ -1083,49 +1140,66 @@ class DatasetProcessor:
                 print(f"  No sequence directories found in {split_images_path}")
                 continue
             
+            step = self.patch - self.overlap if hasattr(self, 'overlap') and self.overlap > 0 else self.patch
+            
             for seq_dir in seq_dirs:
                 print(f"  Processing {seq_dir}...")
                 
                 images_dir = f"{split_images_path}/{seq_dir}/Images"
-                if os.path.exists(images_dir):
-                    image_files = glob.glob(f"{images_dir}/*.{self.img_format}")
-                    for img_file in image_files:
-                        try:
-                            img_name = os.path.basename(img_file)
-                            new_name = f"{seq_dir}_{img_name}"
-                            
-                            img = cv2.imread(img_file)
-                            if img is not None:
-                                success = cv2.imwrite(f"{split_output_images}/{new_name}", img)
-                                if not success:
-                                    print(f"    Failed to save image: {new_name}")
-                            else:
-                                print(f"    Could not read image: {img_file}")
-                        except Exception as e:
-                            print(f"    Error processing image {img_file}: {e}")
-                else:
-                    print(f"    Images directory not found: {images_dir}")
-                
                 labels_dir = f"{split_images_path}/{seq_dir}/Labels"
-                if os.path.exists(labels_dir):
-                    mask_files = glob.glob(f"{labels_dir}/*.{self.mask_format}")
-                    for mask_file in mask_files:
-                        try:
-                            mask_name = os.path.basename(mask_file)
-                            new_name = f"{seq_dir}_{mask_name}"
-                            
-                            color_mask = cv2.imread(mask_file, cv2.IMREAD_COLOR)
-                            if color_mask is not None:
-                                label_mask = self.convert_color_mask_to_labels(color_mask)
-                                success = cv2.imwrite(f"{split_output_masks}/{new_name}", label_mask)
-                                if not success:
-                                    print(f"    Failed to save mask: {new_name}")
-                            else:
-                                print(f"    Could not read mask: {mask_file}")
-                        except Exception as e:
-                            print(f"    Error processing mask {mask_file}: {e}")
-                else:
-                    print(f"    Labels directory not found: {labels_dir}")
+                
+                if not os.path.exists(images_dir) or not os.path.exists(labels_dir):
+                    print(f"    Skipping {seq_dir}: missing Images or Labels directory")
+                    continue
+                
+                image_files = glob.glob(f"{images_dir}/*.{self.img_format}")
+                
+                for img_file in image_files:
+                    try:
+                        img_name = os.path.basename(img_file)
+                        base_name = os.path.splitext(img_name)[0]
+                        mask_file = f"{labels_dir}/{base_name}.{self.mask_format}"
+                        
+                        if not os.path.exists(mask_file):
+                            print(f"    Warning: No matching mask for {img_name}")
+                            continue
+                        
+                        img = cv2.imread(img_file)
+                        color_mask = cv2.imread(mask_file, cv2.IMREAD_COLOR)
+                        
+                        if img is None or color_mask is None:
+                            print(f"    Could not read {img_name} or its mask")
+                            continue
+                        
+                        label_mask = self.convert_color_mask_to_labels(color_mask)
+                        
+                        h, w = img.shape[:2]
+                        
+                        n_patches_h = (h - self.patch) // step + 1
+                        n_patches_w = (w - self.patch) // step + 1
+                        
+                        for i in range(n_patches_h):
+                            for j in range(n_patches_w):
+                                start_h = i * step
+                                start_w = j * step
+                                end_h = start_h + self.patch
+                                end_w = start_w + self.patch
+                                
+                                img_patch = img[start_h:end_h, start_w:end_w]
+                                mask_patch = label_mask[start_h:end_h, start_w:end_w]
+                                
+                                patch_name = f"{seq_dir}_{base_name}_patch_{i}_{j}.png"
+                                
+                                img_success = cv2.imwrite(f"{split_output_images}/{patch_name}", img_patch)
+                                mask_success = cv2.imwrite(f"{split_output_masks}/{patch_name}", mask_patch)
+                                
+                                if not img_success or not mask_success:
+                                    print(f"    Failed to save patch: {patch_name}")
+                        
+                        print(f"    Created {n_patches_h * n_patches_w} patches from {img_name}")
+                        
+                    except Exception as e:
+                        print(f"    Error processing {img_file}: {e}")
             
             print(f"  Completed {uavid_split} -> {standard_split} split")
         
@@ -1168,3 +1242,17 @@ def weighted_categorical_crossentropy(class_weights):
         weighted_cce = cce * pixel_weights
 
         return tf.reduce_mean(weighted_cce)
+    
+
+def check_gpu_usage():
+    print("Available GPUs:")
+    for i, gpu in enumerate(tf.config.list_physical_devices('GPU')):
+        print(f"  GPU {i}: {gpu}")
+    
+    print("GPU memory info:")
+    for i in range(len(tf.config.list_physical_devices('GPU'))):
+        try:
+            memory_info = tf.config.experimental.get_memory_info(f'GPU:{i}')
+            print(f"  GPU {i}: {memory_info['current'] / 1024**3:.2f} GB used")
+        except:
+            print(f"  GPU {i}: Memory info not available")
